@@ -1,0 +1,72 @@
+---
+title: "Asymptotic Variance"
+author: "Guillaume Blanc"
+date: "1 septembre 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Computing the Relative Asymptotic Variance of the Estimator
+
+To compute the relative asymptotic variance of the estimator, we need:
+
+* the asymptotic variance of the maximum likelihood estimator
+* the asymptotic variance of our estimator
+* take the ratio of the trace of the latter to the trace of the former
+
+We'll do that for the factor loadings.
+
+### Asymptotic Variance of the MLE
+
+Given a log-likelihood function $L(\theta)$ and its score function $s(Y, \theta)$, the Avar of the MLE can be written as $Avar = I(\theta)^{-1}$ where
+
+$$
+I(\theta) = E_{\theta} \left[s(Y, \theta)s(Y, \theta)^\top\right]
+$$
+To compute this quantity, we'll use the empirical version:
+
+$$
+\bar I(\theta) = \frac{1}{n}\sum_{i=1}^n s(Y_i, \theta)s(Y_i, \theta)^\top, 
+$$
+where $Y_i$ are iid from $F_{\theta}$. We'll use $n$ large enough to reduce the variance of this estimator to reasonable levels for the current application.
+
+We have the following:
+
+\begin{align*}
+  s\left(\theta\vert y_i\right) 
+    &= \frac{\partial }{\partial \theta}\log \left(\int f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)        \phi(Z)dZ\right) \\
+    &= \frac
+    {\int \frac{\partial }{\partial \theta} f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)        \phi(Z)dZ}
+    {\int f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)        \phi(Z)dZ}\\
+    &= \frac
+    {\int \frac{\partial }{\partial \theta} \left(\log f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)\right) f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)  \phi(Z)dZ}
+    {\int f_{Y_{i}|Z}(y_{i}|Z, x_i, \theta)        \phi(Z)dZ}\\
+    &\equiv \frac{N(\theta, y_i)}{D(\theta, y_i)}
+\end{align*}
+
+
+We need the following functions:
+
+* `fYZ`: returns the conditional density $f_{Y|Z}$
+* `dlogfYZ`: returns the derivative of the log of the conditional density with respect to the loadings
+* `fZ`: returns the density of Z
+
+Then we need to compute $\bar I(\theta)$, which involves many replications of the above, for each $Y$: given $Y$, we need to generate Z and compute the empirical version of $N$ and $D$ above, separately.
+
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -10,3 +10,11 @@ compute_learningRate <- function(iter, start, end){
 compute_gradient <- function(){
 
 }
+
+profile_score_gllvm <- function(){
+
+}
+
+score_gllvm <- function(params){
+
+}
