@@ -67,3 +67,8 @@ gen_par <- function(p, q, k=0, family){
   }
   list(A=A, psi=psi, B=B)
 }
+
+
+compute_natpar <- function(par, Z, X){
+  Z %*% t(par$A) + X %*% t(par$B)
+}
