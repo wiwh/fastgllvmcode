@@ -1,0 +1,132 @@
+---
+title: "Computing the Information Matrix"
+author: "Guillaume Blanc"
+date: "6 septembre 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Monte Carlo Computation of the Information Matrix
+The asymptotic variance $\text{AVAR}(\theta)$ of an M-estimator can be written as:
+
+$$
+\text{AVAR}(\theta) = A(\theta)^{-1}B(\theta) \left[A(\theta^{-1})\right]^{\top}
+$$
+where 
+
+$$
+A(\theta) =  \mathbb E_Y \left[H(\theta, Y)\right], \\
+B(\theta) = \mathbb E_Y \left[s(\theta, Y)s(\theta, Y)^\top\right]
+$$
+
+
+where $s(\theta, Y) = \frac{\partial \log l(\theta, Y)}{\partial\theta}$ is the score function $H(\theta, Y) = - \frac{\partial s(\theta, Y)}{\partial \theta^\top}$ is a the $p\times p$ hessian matrix.
+
+For the MLE, $A(\theta) = B(\theta)$, and thus its $\text{AVAR}$ can be computed by either $A(\theta)^{-1}$ or $B(\theta)^{-1}$. 
+
+It is assumed that the score function $s$ is readily available, but not the hessian $H$. We will turn to numerical methods to compute $B(\theta)$: to that end, we will use Spall's classic Monte Carlo second-order simultaneous perturbation stochastic approximation (include ref to his 2000 and 2005 papers). Let $Y_{\text{pseudo}}(i)$ denotes the ith pseudo-data vector, $i=1, \dots, N$. The procedure of his 2005 paper fits our needs and involves the use of many estimates $\hat H_{(i)}$:
+
+$$
+\hat H_{(i)} = \frac{1}{2}\left\{
+\frac{s_{(i)}}{2}\left[\Delta_{(i)1}^{-1}, \Delta_{(i)2}^{-1}, \cdots, \Delta_{(i)p}^{-1}\right] + 
+\left(\frac{s_{(i)}}{2}\left[\Delta_{(i)1}^{-1}, \Delta_{(i)2}^{-1}, \cdots, \Delta_{(i)p}^{-1}\right]\right)^\top\right\}, 
+$$
+where $s_{(i)} \equiv s(\theta + \Delta_{(i)}, Y_{\text{pseudo}}(i)) - s(\theta - \Delta_{(i)}, Y_{\text{pseudo}}(i))$ and the perturbation vector $\Delta_{(i)} \equiv \left[\Delta_{(i)1}^{-1}, \Delta_{(i)2}^{-1}, \cdots, \Delta_{(i)p}^{-1}\right]^\top$ is a vector of bernoulli random variables multiplied by a small scalar $c$. As noted by Spall 2005, $\hat H_{(i)}$ is a nearly unbiased estimator of the unknown $H$, which allows to estimate $A(\theta)$ as
+
+$$
+\hat A(\theta, N) = \frac{1}{N} \sum_{i=1}^N \hat H_{(i)}.
+$$
+
+The bias can be shown to be of order $O(c^2)$: the estimation can thus be made better by reducing $c$ and increasing $N$. Spall (2005) has found $c=0.0001$ to be effective.
+
+The obvious advantage of this method is that the computations of $\hat H_{(i)}$ only requires $2$ evaluations of the score $s$, irrespective of the dimensions $p$.
+
+Let us implement the method.
+
+
+## Implementation
+
+```{r}
+  # The following code is written with readability in mind, not computational efficiency.
+  # Tremendous computational speedups can be obtained by, for instance, vectorizing the methods.
+
+compute_hessian_estimator <- function(score, theta, Y, c){
+  p <- length(theta)
+  perturbation <- sample(c(-c,c), p, replace = T)
+  Gk <- score(theta  + perturbation, Y) - score(theta - perturbation, Y)
+  Hk <- Gk %*% t(1/perturbation)
+  Hk <- 1/2 * (Hk/2 + t(Hk/2))
+  Hk
+}
+compute_expected_hessian <- function(generator, score, theta, N, c=1e-4){
+  # Returns an estimate of the expectation of the hessian
+  # Generator is a function that takes theta and returns a matrix whose rows are the realizations from the true model.
+  # Score is a function that takes theta and an observation Y, and returns a p-vector
+  # theta is a p-vector of parameters
+  # N is the number of summands to compute the final hessian.
+  
+  # Extract information from the arguments
+  p <- length(theta)
+  
+  # Generate the realizations
+  Y <- generator(theta, N)
+  
+  H <- matrix(0, p, p)
+  # The sum is computed sequentially to reduce the memory requirements
+  for(i in 1:N){
+    H <- H + compute_hessian_estimator(score, theta, Y[i,], c=c)
+  }
+  H <- H/N
+  list(H = H)
+}
+```
+
+Let's check an example when the model of the data is multivariate gaussian with mean $\mu = \theta$ and known variance-covariance $\Sigma$. The score of the MLE for $\theta$ is:
+
+$$
+s(\theta, Y) = - \Sigma^{-1} (Y - \mu) 
+$$
+For the MLE, it is easy to see that 
+
+$$
+A(\theta) = \mathbb E_Y\left[ \Sigma^{-1}\right] = \Sigma^{-1}
+$$
+$$
+B(\theta) = \mathbb E_Y\left[-\Sigma^{-1} (Y- \mu)\left(-\Sigma^{-1} (Y- \mu)\right)^\top\right] =  \Sigma^{-1}\mathbb E_Y\left[(Y- \mu)\left((Y- \mu)\right)^\top\right] \Sigma^{-1} = - \Sigma^{-1}\Sigma\Sigma^{-1} = \Sigma^{-1}
+$$
+We'll use this simple example to check the above methodology.
+
+```{r}
+generator <- function(theta, N){
+  mvtnorm::rmvnorm(N, mean=theta, sigma=Sigma)
+}
+
+score_MLE <- function(theta, Y){
+  if(!is.vector(Y)) stop("Y must be provided as a vector, not a matrix.")
+  as.vector(- Sigma_inverse %*% (Y - theta))
+}
+
+set.seed(2131)
+N <- 10000
+p <- 20
+theta <- 1:p
+# add some randomness
+Sigma <- diag(2, p)
+Sigma <- rWishart(1, p, diag(p))[,,1]/sqrt(p)
+Sigma_inverse <- solve(Sigma)
+
+H.hat <- compute_expected_hessian(generator=generator, score=score_MLE, theta=theta, N=N, c=1e-04)$H
+
+# This should be close to Sigma_inverse
+
+par(mfrow=c(1,3))
+image(Sigma_inverse[,p:1])
+image(H.hat[,p:1])
+plot(H.hat, Sigma_inverse); abline(a=0, b=1, col=2)
+par(mfrow=c(1,1))
+```
+
+Although the example is simple and possibly favorable to the method, the results are (surprisingly?) convincing. We can now use the above methodology to compute the asymptotic variance of any M-estimator.
