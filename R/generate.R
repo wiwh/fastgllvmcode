@@ -16,7 +16,7 @@ gen_gllvm <- function(n, p, q, k=0, family="normal", par=NULL, Z=NULL, X=NULL){
   if(is.null(Z)) Z <- gen_Z(n, q)
   if(is.null(X)) X <- gen_X(n, k)
   if(length(family)==1) family <- rep(family, p)
-  par <- gen_par(p, q, k, family)
+  if(is.null(par)) par <- gen_par(p, q, k, family)
   Y <- gen_Y(par, Z, X, family)
 
   list(Y=Y, Z=Z, X=X, par=par)
@@ -65,7 +65,7 @@ gen_par <- function(p, q, k=0, family){
   } else {
     B <- matrix(rnorm(p*k), p, k)
   }
-  list(A=A, psi=psi, B=B)
+  list(A=A, Psi=psi, B=B)
 }
 
 

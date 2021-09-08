@@ -1,4 +1,8 @@
 compute_K <- function(par){
+  A <- par$A
+  p <- nrow(A)
+  q <- ncol(A)
+  Psi <- par$Psi
   Ap <- A/Psi
   solve(t(A)%*% Ap + diag(1, q)) %*% t(Ap)
 }

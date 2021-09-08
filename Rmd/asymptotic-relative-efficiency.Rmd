@@ -96,8 +96,8 @@ where
 
 and where, for the bernoulli distribution, we have
 
-* $\beta_j(\eta_{ij}) = \eta_{ij} - \text{sig}(\eta_{ij})$, whith $\text{sig}(x) = 1/(1+\exp(-x))$
-* $\beta_j'(\eta_{ij}) = 1 - \frac{\text{sig}'(\eta_{ij})}{\text{sig}(\eta_{ij})} = \text{sig}(\eta_{ij})$
+* $b_j(\eta_{ij}) = \eta_{ij} - \text{sig}(\eta_{ij})$, whith $\text{sig}(x) = 1/(1+\exp(-x))$
+* $b_j'(\eta_{ij}) = 1 - \frac{\text{sig}'(\eta_{ij})}{\text{sig}(\eta_{ij})} = \text{sig}(\eta_{ij})$
 * $c_j(y_{ij}, \tau_j) = 0$
 * $\tau_j=1$
 
@@ -127,9 +127,18 @@ cfunc <- function(Y, psi){
 
 fYZ <- function(Y, Z, par){
   natpar <- Z %*% t(par$A) 
-  dens <- exp(t(t(Y * natpar - bfunc(natpar))/par$psi) + cfunc(Y, par$psi))
+  dens <- exp(t(t(Y * natpar - bfunc(natpar))/par$Psi) + cfunc(Y, par$Psi))
   apply(dens, 1, prod)
 }
+
+# same as fYZ but with Y a vector, also there is no cfunc... TODO
+
+fYiZ <- function(Yi, Z, par){
+  natpar <- Z %*% t(par$A) 
+  dens <- exp(t(t(t(Yi * t(natpar)) - bfunc(natpar))/par$Psi))
+  apply(dens, 1, prod)
+}
+
 
 # derviative of the log conditional distribution w.r.t A. 
 # Returns an n * (p*q) matrix, where each row is a p*q vector,
@@ -137,20 +146,36 @@ fYZ <- function(Y, Z, par){
 
 dlogfYZ <- function(Y, Z, par){
   n <- nrow(Y)
+  p <- nrow(par$A)
+  q <- ncol(par$A)
   natpar <- Z %*% t(par$A)
-  deriv <- t(sapply(1:n, function(i){
-    as.vector(t((Y[i,] - sigmoid(natpar)[i,]) %*% t(Z[i,])))
+  t(sapply(1:n, function(i){
+    Zimat <- matrix(Z[i,], nrow=p, ncol=q, byrow=T)
+    matderiv <- (Y[i,] - sigmoid(natpar[i,])) * Zimat
+    vecderiv <- as.vector(t(matderiv))
   }))
-  deriv
 }
 
 # same as dlogfYZ but for a single observation
-dlogfYZi <- function(Yi, Zi, par){
+dlogfYiZi <- function(Yi, Zi, par){
   natpar <- as.vector(Zi %*% t(par$A))
   as.vector(t((Yi - sigmoid(natpar)) %*% t(Zi)))
 }
 
-# Returns D() for each of the observations, returns an n-vector
+# same as dlogfYZ but with vector Y and matrix Z
+dlogfYiZ <- function(Yi, Z, par){
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  n <- nrow(Z)
+  natpar <- Z %*% t(par$A)
+  t(sapply(1:n, function(i){
+    Zimat <- matrix(Z[i,], nrow=p, ncol=q, byrow=T)
+    matderiv <- (Yi - sigmoid(natpar[i,])) * Zimat
+    vecderiv <- as.vector(t(matderiv))
+  }))
+}
+
+# Returns D() for each of the observations; returns an n-vector
 compute_D <- function(Y, par, nD){
   n <- nrow(Y)
   q <- ncol(par$A)
@@ -181,7 +206,7 @@ compute_N <- function(Y, par, nN){
   A.deriv <- 
     t(sapply(1:n, function(i){
       rowMeans(sapply(1:nN, function(iN){
-        dlogfYZi(Y[i,], Z[iN, ], par) * fYZ(Y[i,,drop=F], Z[iN,,drop=F], par)
+        dlogfYiZi(Y[i,], Z[iN, ], par) * fYZ(Y[i,,drop=F], Z[iN,,drop=F], par)
       }))
     }))
   A.deriv
@@ -217,60 +242,170 @@ compute_I <- function(par, n, nD, nN){
 }
 ```
 
+
+
 ###  Computing the information matrix for the MLE
 
-Compute the scores
 
 ```{r}
 set.seed(451)
 # generate the parameters 
 n <- 1000
 nD <- nN <- 100
-p <- 5
-q <- 1
+p <- 3
+q <- 2
 par <- gen_par(p, q, k=0, family="bernoulli")
 
 gllvm_dat <- gen_gllvm(n, p, q, k=0, family="bernoulli", par=par)
 Y <- gllvm_dat$Y
+Z <- gllvm_dat$Z
 
+```
+
+With $p$ manifest random variables, there are only $2^p$ possible outcomes. So no need to compute all $n$ gradients, only these $2^p$. 
+
+```{r}
+# All outcomes, with each row corresponding to 
+compute_outcomes <- function(p){
+ t(sapply(0:(2**p-1),function(x){ as.integer(intToBits(x))})[p:1, ])
+}
+outcomes <- compute_outcomes(p)
+outcomes
+```
+
+#### Testing the functions
+
+
+```{r}
+all.equal(fYZ(Y, Z, par), fYZ2(Y, Z, par))
+```
+```{r}
+all.equal(dlogfYZ(Y, Z, par), dlogfYZ2(Y, Z, par))
+```
+
+```{r}
+compute_D2 <- function(Y, par, nD){
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  n <- nrow(Y)
+  sapply(1:n, function(i){
+    Z <- gen_Z(nD, q)
+    Ymat <- matrix(Y[i,], nrow=nD, ncol=p, byrow=T)
+    mean(fYZ(Ymat, Z, par))
+  })
+}
+```
+
+```{r}
+D1 <- compute_D(Y, par, nD)
+D2 <- compute_D2(Y, par, nD)
+```
+
+```{r}
+compute_N2 <- function(Y, par, nN){
+  n <- nrow(Y)
+  q <- ncol(par$A)
+  t(sapply(1:n, function(i){
+    Z <- gen_Z(nN, q)
+    # dlogFYZ returns an n vector
+    colMeans(dlogfYiZ(Y[i,], Z, par) * fYiZ(Y[i,], Z, par))
+  }))
+}
 ```
 
 ```{r, cache=T}
-scores <- compute_scores(Y, par, nD, nN)
+# these two have been checked to lead to similar results but N2 is way faster
+N1 <- compute_N(outcomes, par, nN)
+N2 <- compute_N2(outcomes, par, nN)
+plot(N1, N2)
 ```
 
-The loadings are:
+
 
 ```{r}
-par$A
+compute_scores2 <- function(Y, par, nD, nN){
+  N <- compute_N2(Y, par, nN)
+  D <- compute_D2(Y, par, nD)
+  N/D
+}
 ```
 
-as a sanity check, the expectation of the scores must be 0 at the true value... let's check this
+```{r, cache=T}
+# compute_scores2 is way faster. both functions have been checked to yield identical results.
+outcomes_scores1 <- compute_scores(outcomes, par, 10000, 10000)
+outcomes_scores2 <- compute_scores2(outcomes, par, 10000, 10000)
+
+plot(outcomes_scores1, outcomes_scores2)
+```
+
+We're not done yet! Now that we have the outcomes scores, we need to match them to the data $Y$. Notice that the outcomes are conveniently ordered so that the row ith binary value, in base 10, is equal to i. We'll use this.
 
 ```{r}
-boxplot(scores)
+compute_scores_Y <- function(Y, par, nD, nN, outcomes_scores=NULL){
+  n <- nrow(Y)
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  
+  num_outcomes <- 2**p
+  
+  if(is.null(outcomes_scores)){
+    outcomes <- compute_outcomes(p)
+    outcomes_scores <- compute_scores2(outcomes, par, nD, nN)
+  }
+  
+  bin <- 2^((p-1):0)
+  Y.outcomes <- as.vector(Y %*% bin)
+  Y.outcomes.freq  <- table(Y.outcomes)
+  
+  scores_Y <- matrix(0, n, p*q)
+  
+  for(i in 1:num_outcomes){
+    scores_Y[which(Y.outcomes == (i-1)), ] <- matrix(outcomes_scores[i, ],
+                                                     nrow=Y.outcomes.freq[i],
+                                                     ncol=p*q,
+                                                     byrow = T)
+  }
+  scores_Y
+}
 ```
 
+
+Now we can generate lots of observations at minimal computational cost, although it's approximate.
+```{r}
+set.seed(1231)
+p <- 5 
+q <- 1
+n <- 1e5
+nN <- nD <- 10000
+gllvm <- gen_gllvm(n, p, q, family = "bernoulli")
+Y <- gllvm$Y
+par <- gllvm$par
+set.seed(24124)
+scores_Y <- compute_scores_Y(Y, par, nD, nN)
+```
+
+```{r}
+boxplot(scores_Y, main="Scores at the true value of the parameter.")
+points(1:(p*q), colMeans(scores_Y), col=2, pch=1, pty=3)
+abline(h=0, col=2)
+```
 We next compute the information matrix as the empirical average of the outer product of the scores
 
 
 ```{r, cache=T}
 I <- matrix(rowMeans(sapply(1:n, function(i){
-  as.vector(scores[i,] %*% t(scores[i,]))
+  as.vector(scores_Y[i,] %*% t(scores_Y[i,]))
 })), p*q, p*q)
 ```
 
 or equivalently use the wrapper function `compute_I`:
 
 ```{r, eval=FALSE}
-I <- compute_I(par, n, nD, nN)
+# not updated yet, do not run
+# I <- compute_I(par, n, nD, nN)
 ```
 
-```{r}
-I
-```
-
-# now we compute 
+# Now we compute 
 
 Finally, we are interested in its inverse, as an estimate of the asymptotic variance of the MLE:
 
@@ -281,6 +416,31 @@ Ineg
 
 
 We'll use `Ineg` as a benchmark to compare other estimators. For instance, we could compare the traces, which is here equal to `r sum(diag(Ineg))`, or compute the relative efficiency of the estimators.
+
+
+
+## Now try with numDeriv
+As a check, we now compute the asymptotic variance using the expectation of the Hessian:
+```{r cache=T}
+theta <- as.vector(par$A)
+# Y <- generator_MLE(theta, 1000)
+mean_scores <- function(theta){
+  set.seed(21314)
+  par2 <- par
+  par2$A <- theta_to_mat(theta, p, q)
+  colMeans(compute_scores_Y(Y, par2, nD, nN))
+}
+nD <- 10000
+nN <- 10000
+H <- - numDeriv::jacobian(mean_scores, theta, method.args=list(eps=1e-001))
+```
+
+They're very similar, which is a good sign that the derivations and implementations were correct.
+
+```{r}
+plot(I, H)
+```
+
 
 # Asymptotic Variance of our Estimator
 
@@ -309,7 +469,76 @@ $$
     .
 $$
 
-We need its derivative w.r.t. $\theta$, which quickly becomes a mess. Instead, we use Spall's method.
+We need:
+
+* `fYZ`: same as above
+* `compute_Z`: compute Z given Y and theta
+
+```{r}
+
+compute_Z <- function(Y, par){
+  K <- compute_K(par)
+  Z <- Y %*% t(K)
+}
+
+compute_profile_scores <- function(Y, par, nE=nrow(Y)){
+  set.seed(12323)
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  Zstar <- compute_Z(Y, par)
+  deriv <- dlogfYZ(Y, Zstar, par)
+  # compute expectation under par_true
+  Y0 <- gen_gllvm(nE, p, q, family="bernoulli", par=par)$Y
+  Zstar0 <- compute_Z(Y0, par)
+  deriv0 <- dlogfYZ(Y0, Zstar0, par)
+  deriv0.mean <- colMeans(deriv0)
+  
+  t(t(deriv) - deriv0.mean)
+}
+
+variance_scores <- function(scores){
+  n <- nrow(scores)
+  scores <- scale(scores, scale=F)
+  t(scores) %*% scores/n
+}
+
+score_to_derive <- function(theta){
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  par2 <- par
+  par2$A <- theta_to_mat(theta, p, q)
+  colMeans(compute_profile_scores(Y, par2, nE))
+}
+
+n <- 1e4
+nE <- 1e4
+p <- 5
+q <- 1
+
+gllvm <- gen_gllvm(n, p, q, family="bernoulli")
+par <- gllvm$par
+Y   <- gllvm$Y
+Z   <- gllvm$Z
+prof_scores_Y <- compute_profile_scores(Y, par)
+
+
+theta <- as.vector(par$A)
+aseq <- seq(-1,1, l=21)
+sims <- sapply(aseq, function(delta){
+  theta2 <- theta
+  cat("\n", delta)
+  theta2[i] <- theta[i] + delta
+  score_to_derive(theta2)
+})
+plot(aseq, sims[i,])
+# now we need the derivative
+A <- - numDeriv::jacobian(score_to_derive, theta, method.args=list(eps=1e-1))
+B <- variance_scores(prof_scores_Y)
+# now compute the avar
+Aneg <- solve(A)
+Aneg %*% B %*% t(Aneg)
+```
+
 
 ### Simultaneous-perturbation method to compute the derivative of a score
 
@@ -333,8 +562,7 @@ score_MVNORM_MLE <- function(theta, Y){
 }
 
 set.seed(2131)
-N <- 10000
-p <- 20
+N <- 1000
 theta <- 1:p
 # add some randomness
 Sigma <- diag(2, p)
@@ -374,14 +602,19 @@ score_MLE <- function(theta, Y){
   as.vector(compute_score(Y, par, nD, nN))
 }
 
-
-N <- 1000
+N <- 10
 nD <- nN <- 1000
 set.seed(1324)
 theta <- theta_to_vec(par$A)
 # test:
 Y <- generator_MLE(theta=theta, N)
 
-H <- compute_expected_hessian(generator=generator_MLE, score=score_MLE, theta=theta, N=N, c=0.01)$H
+H <- compute_expected_hessian(generator=generator_MLE, score=score_MLE, theta=theta, N=N, c=1, score.seed = T)$H
 ```
 
+# variance with the same Y?
+
+```{r}
+nD <- 1000
+nN <- 1000
+```
