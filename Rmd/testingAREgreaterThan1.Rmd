@@ -1,0 +1,56 @@
+---
+title: "Testing ARE > 1"
+author: "Guillaume Blanc"
+date: "09/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Testing the relative asymptotic efficiency of our estimator
+
+We'll test the hypothesis H0: ARE=0 against the one-sided alternative hypothesis H1: ARE >1. For computational feasibility, for now, we reduce the number of observations and dimensions; the results will exhibit slightly more variance, but we'll have more datapoints to counterbalance this.
+
+```{r}
+compute_I <- function(Y, par, nN, nD){
+  scores_Y <- compute_scores_Y(Y, par, nD, nN)
+  I <- t(scores_Y) %*% scores_Y
+  I <- I/n
+  I
+}
+compute_Avar <- function(Y, par, nE){
+  nE <- n
+  theta <- theta_to_vec(par$A)
+  # now we need the derivative
+  A <- - jacobian(score_to_derive, theta, eps=1e-1, Y=Y, par=par)
+  # A2 <- - numDeriv::jacobian(score_to_derive, theta, method.args=list(eps=1e-1))
+  B <- variance_scores(Y, par, nE)
+  # now compute the avar
+  Aneg <- solve(A)
+  Avar <- Aneg %*% B %*% t(Aneg)
+  Avar
+}
+compute_ARE <- function(par, n, nN=10000, nD=10000, nE=n){
+  p <- nrow(par$A)
+  q <- ncol(par$A)
+  gllvm <- gen_gllvm(n, p, q, family="bernoulli", par=par)
+  Y <- gllvm$Y
+  I <- compute_I(Y, par, nN, nD)
+  Avar <- compute_Avar(Y, par, nE)
+  ARE <- sum(diag(Avar))/sum(diag(solve(I)))
+  
+  list(ARE=ARE, I=I, Avar=Avar)
+}
+```
+
+```{r, eval=F}
+n <- 1e5
+p <- 3
+q <- 1
+par <- gen_par(p, q, family="bernoulli")
+par$A <- matrix(c(-1, 0, 1), 3, 1)
+ARE <- compute_ARE(par, n)
+```

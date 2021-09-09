@@ -1,3 +1,7 @@
+# The following functions are used to make inference and compute asymptotic efficiencies
+
+
+
 # The following code is written with readability in mind, not computational efficiency.
 # Tremendous computational speedups can be obtained by, for instance, vectorizing the methods.
 
@@ -40,30 +44,3 @@ compute_expected_hessian <- function(generator, score, theta, N, c=1e-4, score.s
   H <- H/N
   list(H = H)
 }
-
-
-# here are the functions  used in the document:
-
-
-# conditional density of Y (n * p matrix) given Z (n * q matrix), returns an n-vector
-
-fYZ2 <- function(Y, Z, par){
-  natpar <- Z %*% t(par$A)
-  n <- nrow(Y)
-  sapply(1:n, function(i){
-    prod(exp((Y[i,] * natpar[i, ] - bfunc(natpar[i,]))))
-  })
-}
-
-dlogfYZ2 <- function(Y, Z, par){
-  n <- nrow(Y)
-  p <- nrow(par$A)
-  q <- ncol(par$A)
-  natpar <- Z %*% t(par$A)
-  t(sapply(1:n, function(i){
-    Zimat <- matrix(Z[i,], nrow=p, ncol=q, byrow=T)
-    matderiv <- (Y[i,] - sigmoid(natpar[i,])) * Zimat
-    vecderiv <- as.vector(t(matderiv))
-  }))
-}
-
