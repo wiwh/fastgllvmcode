@@ -332,8 +332,8 @@ compute_scores2 <- function(Y, par, nD, nN){
 
 ```{r, cache=T}
 # compute_scores2 is way faster. both functions have been checked to yield identical results.
-outcomes_scores1 <- compute_scores(outcomes, par, 10000, 10000)
-outcomes_scores2 <- compute_scores2(outcomes, par, 10000, 10000)
+outcomes_scores1 <- compute_scores(outcomes, par, 1000, 1000)
+outcomes_scores2 <- compute_scores2(outcomes, par, 1000, 1000)
 
 plot(outcomes_scores1, outcomes_scores2)
 ```
@@ -373,7 +373,7 @@ compute_scores_Y <- function(Y, par, nD, nN, outcomes_scores=NULL){
 Now we can generate lots of observations at minimal computational cost, although it's approximate.
 ```{r}
 set.seed(1231)
-p <- 5 
+p <- 8 
 q <- 1
 n <- 1e5
 nN <- nD <- 10000
@@ -422,6 +422,10 @@ We'll use `Ineg` as a benchmark to compare other estimators. For instance, we co
 ## Now try with numDeriv
 As a check, we now compute the asymptotic variance using the expectation of the Hessian:
 ```{r cache=T}
+
+theta_to_vec <- function(theta) as.vector(theta)
+theta_to_mat <- function(theta, p, q) matrix(theta, p, q)
+
 theta <- as.vector(par$A)
 # Y <- generator_MLE(theta, 1000)
 mean_scores <- function(theta){
@@ -430,8 +434,8 @@ mean_scores <- function(theta){
   par2$A <- theta_to_mat(theta, p, q)
   colMeans(compute_scores_Y(Y, par2, nD, nN))
 }
-nD <- 10000
-nN <- 10000
+nD <- 1000
+nN <- 1000
 H <- - numDeriv::jacobian(mean_scores, theta, method.args=list(eps=1e-001))
 ```
 
@@ -496,9 +500,9 @@ compute_profile_scores <- function(Y, par, nE=nrow(Y)){
   t(t(deriv) - deriv0.mean)
 }
 
-variance_scores <- function(scores){
+variance_scores <- function(Y, par, nE){
+  scores <- compute_profile_scores(Y, par, nE)
   n <- nrow(scores)
-  scores <- scale(scores, scale=F)
   t(scores) %*% scores/n
 }
 
@@ -510,33 +514,39 @@ score_to_derive <- function(theta){
   colMeans(compute_profile_scores(Y, par2, nE))
 }
 
-n <- 1e4
-nE <- 1e4
-p <- 5
-q <- 1
+jacobian <- function(score, theta, eps=1e-4){
+  pq <- length(theta)
+  jacobian <- matrix(0, pq, pq)
+  for(i in 1:pq){
+    delta <- rep(0, pq)
+    delta[i] <- eps
+    jacobian[,i] <- (score(theta+delta) - score(theta - delta))/(2*eps)
+  }
+  jacobian
+}
 
-gllvm <- gen_gllvm(n, p, q, family="bernoulli")
-par <- gllvm$par
-Y   <- gllvm$Y
-Z   <- gllvm$Z
-prof_scores_Y <- compute_profile_scores(Y, par)
+nE <- n
+theta <- theta_to_vec(par$A)
 
 
-theta <- as.vector(par$A)
-aseq <- seq(-1,1, l=21)
-sims <- sapply(aseq, function(delta){
-  theta2 <- theta
-  cat("\n", delta)
-  theta2[i] <- theta[i] + delta
-  score_to_derive(theta2)
-})
-plot(aseq, sims[i,])
+# theta <- as.vector(par$A)
+# aseq <- seq(-1,1, l=21)
+# sims <- sapply(aseq, function(delta){
+#   theta2 <- theta
+#   cat("\n", delta)
+#   theta2[i] <- theta[i] + delta
+#   score_to_derive(theta2)
+# })
+# plot(aseq, sims[i,])
+
 # now we need the derivative
-A <- - numDeriv::jacobian(score_to_derive, theta, method.args=list(eps=1e-1))
-B <- variance_scores(prof_scores_Y)
+
+A <- - jacobian(score_to_derive, theta, eps=1e-1)
+# A2 <- - numDeriv::jacobian(score_to_derive, theta, method.args=list(eps=1e-1))
+B <- variance_scores(Y, par, nE)
 # now compute the avar
 Aneg <- solve(A)
-Aneg %*% B %*% t(Aneg)
+Avar <- Aneg %*% B %*% t(Aneg)
 ```
 
 
@@ -571,6 +581,7 @@ Sigma_inverse <- solve(Sigma)
 
 H.hat <- compute_expected_hessian(generator=generator_MVNORM, score=score_MVNORM_MLE, theta=theta, N=N, c=1e-04)$H
 
+
 # This should be close to Sigma_inverse
 
 par(mfrow=c(1,3))
@@ -582,9 +593,6 @@ par(mfrow=c(1,1))
 
 #### Now with our example 
 ```{r}
-
-theta_to_vec <- function(theta) as.vector(theta)
-theta_to_mat <- function(theta, p, q) matrix(theta, p, q)
 
 generator_MLE <- function(theta, N){
   p <- nrow(par$A)
