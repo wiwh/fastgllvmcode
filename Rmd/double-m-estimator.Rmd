@@ -1,0 +1,167 @@
+---
+title: "Double M estimator"
+author: "Guillaume"
+date: "9/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Double M Estimator:
+Let us assume $\hat\theta$ is an M-estimator satisfying:
+
+$$
+\sum_{i=1}^n \Psi(\hat\theta, Y_i, x_i) = 0
+$$
+
+We propose the following estimator, solution to :
+
+
+$$
+\sum_{i=1}^n \Psi(\theta - h \cdot \Psi(\theta, Y_i, x_i), Y_i, x_i) = 0
+$$
+
+as a bias-corrected versino of $\hat\theta$.
+
+
+### Binomial example:
+
+```{r}
+sigmoid <- function(x) 1/(1+exp(-x))
+generate <- function(n , x=NULL, beta=NULL, p=5){
+  if(is.null(beta)){
+    beta <- rnorm(p)
+  } else {
+    p <- length(beta)
+  }
+  if(is.null(x)){
+    x <- matrix(rnorm(n*p), n, p)
+    x[,1] <- 1
+  }
+  linpar <- x %*% beta
+  y <- rbinom(n, 1, sigmoid(linpar))
+  list(y=y, beta=beta, x=x, dims=list(n=n, p=p))
+}
+
+psi <- function(beta, y, x){
+  (y - as.vector(sigmoid(x %*% beta))) * x
+}
+
+psi.magnify <- function(beta,y,x, mag.factor=1){
+  psi <- psi(beta,y,x)
+  t(apply(psi, 1, function(psii){
+    signi <- sign(psii)
+    signi*abs(psii)**mag.factor
+  }))
+}
+
+psi.double <- function(beta, y, x, h=1){
+  psis <- psi(beta, y, x)
+  betas <- t(- h*t(psis) + beta)
+  (y - as.vector(sigmoid(rowSums(x * betas)))) * x
+}
+
+psi.double.new <- function(beta, y, x){
+  n <- length(y)
+  linpar <- x %*% beta
+  sigpar <- sigmoid(linpar)
+  psi.new <- t(sapply(1:n, function(i){
+    sigpar[i]*(1-sigpar[i])* x[i,] %*% t(x[i,])%*%(y[i] - sigpar[i] * x[i,])
+  }))
+  psi.new
+}
+
+mle <- function(y,x){
+   fit <- glm(y ~0 + x, family=binomial(link="logit"))
+  list(coef=as.vector(fit$coefficients), fit=fit)
+}
+
+Ineg <- function(psi){
+  solve(t(psi) %*% psi)
+}
+
+Jini.gradient <- function(beta.gen, beta.sample, x, H=100){
+  p <- length(beta.gen)
+  n <- nrow(x)
+  jini.psi <- t(sapply(1:H, function(h){
+    gen <- generate(n, x=x, beta=beta.gen, p=p)
+    gen.psi <- psi(beta.sample,gen$y,gen$x)
+    Ineg <- Ineg2(beta.sample, gen$y, gen$x)
+    Ineg %*% colSums(gen.psi)
+  }))
+  colMeans(jini.psi)
+}
+
+
+
+
+Ineg2 <- function(beta, y, x){
+  n <- nrow(y)
+  sig <- as.vector(sigmoid(x %*% beta))
+  solve(t(sig * (1-sig) * x) %*% x)
+}
+```
+
+
+```{r}
+n <- 1000
+p <- 3
+
+set.seed(213)
+bin <- generate(n)
+y <- bin$y
+x <- bin$x
+MLE.fit <- mle(y,x)
+Ineg(psi(MLE.fit$coef, y,x))
+
+j1 <- Jini.gradient(beta.gen = MLE.fit$coef, beta.sample = MLE.fit$coef, x = x, H=10)
+```
+
+```{r}
+boxplot(psi(beta.MLE, bin$y, bin$x))
+```
+```{r}
+fobj <- function(beta, psifunc, y, x, ...){
+  psis <- psifunc(beta, y, x, ...)
+  sum(colMeans(psis)^2)
+} 
+
+b1 <- optim(rep(0, 5), fobj, psifunc=psi, y=y, x=x, method="BFGS")
+b2 <- optim(rep(0, 5), fobj, psifunc=psi.double, y=y, x=x, h=1, method="BFGS")
+```
+
+# do some sims
+
+```{r}
+n <-100 
+p <- 10 
+
+set.seed(21303)
+bin <- generate(n, beta=c(-2,-1,rep(0, p-4), 1, 2))
+
+beta.mle <- mle(bin$y, bin$x)$coef
+beta <- bin$beta
+conv <- T
+it <- 0
+while(conv){
+  it <- it + 1
+  bold <- beta
+  # beta <- beta + 5*colMeans(psi.magnify(beta, bin$y, bin$x, mag.factor=1.05))
+  set.seed(213)
+  grad <- Jini.gradient(beta.gen = beta, beta.sample=beta.mle, x=bin$x, H=10+it)
+  beta <- beta - (1/(it+10))**.5 * grad
+  conv <- sum(abs(grad)) > 1e-5 | it > 500
+  cat("\n", "iter:", it, " crit", sum(abs(grad)))
+  if(!conv) cat("\n iter reached", it)
+}
+
+# b1 <- optim(bin$beta, fobj, psifunc=psi, y=bin$y, x=bin$x, method="BFGS")
+# b2 <- optim(bin$beta, fobj, psifunc=psi.double, y=bin$y, x=bin$x, h=.1, method="BFGS")
+```
+
+
+
+
+

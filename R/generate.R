@@ -12,11 +12,21 @@
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_gllvm <- function(n, p, q, k=0, family="normal", par=NULL, Z=NULL, X=NULL){
+gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL, X=NULL){
+  if(all(is.null(p), is.null(q), is.null(par)))
+    stop("At least par, or both p and q, must be supplied.")
+  if(!is.null(par)){
+    p <- par$dims$p
+    q <- par$dims$q
+  } else {
+    par <- gen_par(p, q, k, family)
+  }
+
+
   if(is.null(Z)) Z <- gen_Z(n, q)
   if(is.null(X)) X <- gen_X(n, k)
-  if(length(family)==1) family <- rep(family, p)
-  if(is.null(par)) par <- gen_par(p, q, k, family)
+  if(length(family)==1) family <- rep(family, p) # todo: at this point lead to a more efficient, dedicated function
+
   Y <- gen_Y(par, Z, X, family)
 
   list(Y=Y, Z=Z, X=X, par=par)
@@ -39,10 +49,10 @@ gen_X <- function(n, k){
 gen_Y <- function(par, Z, X, family){
   n <- nrow(Z)
   p <- nrow(par$A)
-  natpar <- Z %*% t(par$A) + X %*% t(par$B)
+  natpar <- compute_natpar(par, Z, X)
   Y <- sapply(1:p, function(j){
     switch(family[j],
-      normal = rnorm(n, natpar[,j], par$psi[j]),
+      normal = rnorm(n, natpar[,j], par$Psi[j]),
       bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
   })
   Y
@@ -50,24 +60,34 @@ gen_Y <- function(par, Z, X, family){
 
 #' Generates parameters for a gllvm
 #'
-#' returns a list of parameters
+#' returns a list of parameters.
 #'
 #'
-gen_par <- function(p, q, k=0, family){
+gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL){
   # generate the (p, q) matrix of loadings
-  A <- matrix(rnorm(p*q), p, q)
+  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)
   # generate the vector of scale parameters
-  psi <- runif(p, 0.5, 2)
-  psi[family=="bernoulli"] <- 1
+  if(is.null(Psi)) Psi <- runif(p, 0.5, 2)
+  Psi[family=="bernoulli"] <- 1
   # generate the (p, k) matrix of coefficients
-  if(k==0){
-    B <- matrix(0, p, 1)
-  } else {
-    B <- matrix(rnorm(p*k), p, k)
+  if(is.null(B)){
+    if(k==0){
+      B <- matrix(0, p, 1)
+    } else {
+      B <- matrix(rnorm(p*k), p, k)
+    }
   }
-  list(A=A, Psi=psi, B=B)
+  list(A=A, B=B, Psi=Psi, dims=list(p=p, q=q, k=k), family=family)
 }
 
+#' Modifies par with new parameters
+#'
+change_par <- function(par, A=NULL, B=NULL, Psi=NULL){
+  if(!is.null(A)) par$A <- A
+  if(!is.null(B)) par$B <- B
+  if(!is.null(Psi)) par$Psi <- Psi
+  par
+}
 
 compute_natpar <- function(par, Z, X){
   Z %*% t(par$A) + X %*% t(par$B)
