@@ -120,7 +120,7 @@ j1 <- Jini.gradient(beta.gen = MLE.fit$coef, beta.sample = MLE.fit$coef, x = x, 
 ```
 
 ```{r}
-boxplot(psi(beta.MLE, bin$y, bin$x))
+boxplot(psi(MLE.fit$coef, bin$y, bin$x))
 ```
 ```{r}
 fobj <- function(beta, psifunc, y, x, ...){

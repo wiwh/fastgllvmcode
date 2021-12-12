@@ -12,14 +12,14 @@
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL, X=NULL){
+gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL, X=NULL, scale=0.5){
   if(all(is.null(p), is.null(q), is.null(par)))
     stop("At least par, or both p and q, must be supplied.")
   if(!is.null(par)){
     p <- par$dims$p
     q <- par$dims$q
   } else {
-    par <- gen_par(p, q, k, family)
+    par <- gen_par(p, q, k, family, scale=scale)
   }
 
 
@@ -27,9 +27,9 @@ gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL,
   if(is.null(X)) X <- gen_X(n, k)
   if(length(family)==1) family <- rep(family, p) # todo: at this point lead to a more efficient, dedicated function
 
-  Y <- gen_Y(par, Z, X, family)
+  dat <- gen_Y(par, Z, X, family)
 
-  list(Y=Y, Z=Z, X=X, par=par)
+  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par)
 }
 
 gen_Z <- function(n, q){
@@ -55,7 +55,7 @@ gen_Y <- function(par, Z, X, family){
       normal = rnorm(n, natpar[,j], par$Psi[j]),
       bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
   })
-  Y
+  list(Y=Y, natpar=natpar)
 }
 
 #' Generates parameters for a gllvm
@@ -63,9 +63,9 @@ gen_Y <- function(par, Z, X, family){
 #' returns a list of parameters.
 #'
 #'
-gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL){
+gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL, scale=0.5){
   # generate the (p, q) matrix of loadings
-  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)
+  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)*scale
   # generate the vector of scale parameters
   if(is.null(Psi)) Psi <- runif(p, 0.5, 2)
   Psi[family=="bernoulli"] <- 1
@@ -74,7 +74,7 @@ gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL){
     if(k==0){
       B <- matrix(0, p, 1)
     } else {
-      B <- matrix(rnorm(p*k), p, k)
+      B <- matrix(rnorm(p*k), p, k)*scale
     }
   }
   list(A=A, B=B, Psi=Psi, dims=list(p=p, q=q, k=k), family=family)

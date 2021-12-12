@@ -178,10 +178,11 @@ dlogfYiZ <- function(Yi, Z, par){
 }
 
 # Returns D() for each of the observations; returns an n-vector
-compute_D <- function(Y, par, nD){
+compute_D <- function(Y, par, nD, seed=NULL){
   n <- nrow(Y)
   q <- ncol(par$A)
   
+  if(is.null(seed))set.seed(seed)
   if(n==1){
     D <- mean(sapply(1:nD, function(na){
     Z <- gen_Z(n = n, q=q)
@@ -198,9 +199,11 @@ compute_D <- function(Y, par, nD){
 }
 
 # Compute N() for each of the observations, returns an n-vector
-compute_N <- function(Y, par, nN){
+compute_N <- function(Y, par, nN, seed=NULL){
   n <- nrow(Y)
   q <- ncol(par$A)
+  
+  if(is.null(seed))set.seed(seed)
   t(sapply(1:n, function(i){
     Z <- gen_Z(nN, q)
     # dlogFYZ returns an n vector
@@ -209,9 +212,9 @@ compute_N <- function(Y, par, nN){
 }
 
 # finally, compute the scores as a n * (p*q) matrix:
-compute_scores <- function(Y, par, nD, nN){
-  N <- compute_N(Y, par, nN)
-  D <- compute_D(Y, par, nD)
+compute_scores <- function(Y, par, nD, nN, seed=NULL){
+  N <- compute_N(Y, par, nN, seed)
+  D <- compute_D(Y, par, nD, seed)
   N/D
 }
 
@@ -232,24 +235,31 @@ jacobian <- function(score, theta, eps=1e-3, ...){
 
 # or just one score from one observation, as a (p*q) vector:
 
-compute_score <- function(Yi, par, nD, nN){
+compute_score <- function(Yi, par, nD, nN, seed=NULL){
   Y <- t(as.vector(Yi))
-  N <- compute_N(Y, par, nN)
-  D <- compute_D(Y, par, nD)
+  N <- compute_N(Y, par, nN, seed=NULL)
+  D <- compute_D(Y, par, nD, seed=NULL)
   N/D
 }
 
-compute_I <- function(par, n, nD, nN){
+get_I <- function(scores){
+  # center scores
+  scores <- scale(scores, scale=F)
+  t(scores_Y) %*% scores_Y
+  I <- t(scores_Y) %*% scores_Y
+  I <- I/nrow(scores_Y)
+  I
+}
+
+compute_I <- function(par, n, nD, nN, seed=NULL){
   p <- nrow(par$A)
   q <- ncol(par$A)
   gllvm_dat <- gen_gllvm(n, p, q, k=0, family="bernoulli", par=par)
   Y <- gllvm_dat$Y
-  scores <- compute_scores(Y, par, nD, nN)
-  
-  I <- matrix(rowMeans(sapply(1:n, function(i){
-      as.vector(scores[i,] %*% t(scores[i,]))
-      })), p*q, p*q)
-  I
+  scores <- compute_scores(Y, par, nD, nN, seed=NULL)
+  I <- get_I(scores)
+  Ineg <- solve(I)
+  liste(I=I, Ineg =Ineg)
 }
 
 # transforms theta from vector to matrix and vice versa
@@ -276,7 +286,7 @@ head(outcomes)
 Now that we have the outcomes scores, we need to match them to the data $Y$. Notice that the outcomes are conveniently ordered so that the row ith binary value, in base 10, is equal to i. We'll use this.
 
 ```{r}
-compute_scores_Y <- function(Y, par, nD, nN, outcomes_scores=NULL){
+compute_scores_Y <- function(Y, par, nD, nN, seed=NULL, outcomes_scores=NULL){
   n <- nrow(Y)
   p <- nrow(par$A)
   q <- ncol(par$A)
@@ -285,7 +295,7 @@ compute_scores_Y <- function(Y, par, nD, nN, outcomes_scores=NULL){
   
   if(is.null(outcomes_scores)){
     outcomes <- compute_outcomes(p)
-    outcomes_scores <- compute_scores(outcomes, par, nD, nN)
+    outcomes_scores <- compute_scores(outcomes, par, nD, nN, seed)
   }
   
   bin <- 2^((p-1):0)
@@ -310,15 +320,14 @@ Now we can generate lots of observations at a relatively low computational cost.
 set.seed(1231)
 p <- 8 
 q <- 1
-n <- 1e6
-nN <- nD <- 10000
+n <- 1e5
+nN <- nD <- 5000
 par <- gen_par(p, q, family="bernoulli")
 par$A <- matrix(c(-2, -2, -1, -1, 1, 1, 2, 2), p, 1)
 gllvm <- gen_gllvm(n, p, q, family = "bernoulli", par=par)
 Y <- gllvm$Y
 par <- gllvm$par
-set.seed(24124)
-scores_Y <- compute_scores_Y(Y, par, nD, nN)
+scores_Y <- compute_scores_Y(Y, par, nD, nN, seed=42345)
 ```
 
 ```{r}
@@ -330,8 +339,7 @@ We next compute the information matrix as the empirical average of the outer pro
 
 
 ```{r}
-I <- t(scores_Y) %*% scores_Y
-I <- I/nrow(scores_Y)
+I <- get_I(scores_Y)
 ```
 
 Finally, we are interested in its inverse, as an estimate of the asymptotic variance of the MLE:
@@ -383,13 +391,14 @@ compute_Z <- function(Y, par){
   Z <- Y %*% t(K)
 }
 
-compute_profile_scores <- function(Y, par, nE=nrow(Y)){
-  set.seed(12323)
+compute_profile_scores <- function(Y, par, nE=nrow(Y), seed=NULL){
   p <- nrow(par$A)
   q <- ncol(par$A)
+  
   Zstar <- compute_Z(Y, par)
   deriv <- dlogfYZ(Y, Zstar, par)
   # compute expectation under par_true
+  if(!is.null(seed)) set.seed(seed)
   Y0 <- gen_gllvm(nE, p, q, family="bernoulli", par=par)$Y
   Zstar0 <- compute_Z(Y0, par)
   deriv0 <- dlogfYZ(Y0, Zstar0, par)
@@ -404,12 +413,12 @@ variance_scores <- function(Y, par, nE){
   t(scores) %*% scores/n
 }
 
-score_to_derive <- function(Y, theta, par){
+score_to_derive <- function(Y, theta, par, seed=NULL){
   p <- nrow(par$A)
   q <- ncol(par$A)
   par2 <- par
   par2$A <- theta_to_mat(theta, p, q)
-  colMeans(compute_profile_scores(Y, par2, nE))
+  colMeans(compute_profile_scores(Y, par2, nE, seed=seed))
 }
 ```
 
@@ -420,7 +429,7 @@ theta <- theta_to_vec(par$A)
 
 # now we need the derivative
 
-A <- - jacobian(score_to_derive, theta, eps=1e-1, Y=Y, par=par)
+A <- - jacobian(score_to_derive, theta, eps=1e-1, Y=Y, par=par, seed=123123)
 # A2 <- - numDeriv::jacobian(score_to_derive, theta, method.args=list(eps=1e-1))
 B <- variance_scores(Y, par, nE)
 # now compute the avar
@@ -431,11 +440,11 @@ Avar <- Aneg %*% B %*% t(Aneg)
 We can now  compute the relative efficiency as the following ratio:
 
 $$
-\text{ARE} = \frac{\text{trace}\left(A(\theta)^{-1}B(\theta)\left[A(\theta)^{-1}\right]^\top\right)}{\text{trace}(I^{-1})}
+\text{ARE} = \frac{\text{trace}(I^{-1})}{\text{trace}\left(A(\theta)^{-1}B(\theta)\left[A(\theta)^{-1}\right]^\top\right)}
 $$
 
 ```{r}
-ARE = sum(diag(Avar))/sum(diag(Ineg))
+ARE = sum(diag(Ineg))/sum(diag(Avar))
 ```
 
 And we obtain an ARE of `r ARE` for this example. Of course, due to the Monte Carlo simulations, this result is random. One could repeat this experiment to test the hypothesis that this ratio is greater than 1.
