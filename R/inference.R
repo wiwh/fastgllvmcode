@@ -1,6 +1,6 @@
+
+
 # The following functions are used to make inference and compute asymptotic efficiencies
-
-
 
 # The following code is written with readability in mind, not computational efficiency.
 # Tremendous computational speedups can be obtained by, for instance, vectorizing the methods.

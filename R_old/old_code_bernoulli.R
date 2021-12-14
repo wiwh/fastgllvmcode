@@ -11,7 +11,7 @@ gllvm.rbinary <- function(n, A, Z=NULL, B=matrix(0, nrow(A), 1), X=matrix(1, n, 
   # TODO: test that this is strictly equivalent with the same seed (it is, but test it)
   # Warning! this is extremely inefficient. Provide sunif if possible.
   Y <- sapply(1:p, function(j){
-    rbinom(n = n,
+  rbinom(n = n,
            size = 1,
            prob = 1/(1 + exp(-linpar[,j])))
   })
@@ -184,12 +184,14 @@ bernoulli.ffa.stochastic <- function(Y, q, Psi=rep(1, ncol(Y))){
 }
 
 
-bernoulli.ffa.covariate <- function(Y, q, X=matrix(1, nrow(Y), 1), reps=4, iter=250, A.init=NULL, B.init=NULL, Psi=rep(1, ncol(Y)), compute.Q=T, verbose=T){
+bernoulli.ffa.covariate <- function(Y, q, X=matrix(1, nrow(Y), 1), reps=4, iter=250, A.init=NULL, B.init=NULL, Psi=rep(1, ncol(Y)), compute.Q=F, verbose=T){
+  # get some parameter values
   nobs <- nrow(Y)
   p <- ncol(Y)
   k <- ncol(X)
   if(!is.null(A.init)) A <- A.init else A <- diag(1, p, q)
   if(!is.null(B.init)) B <- B.init else B <- t(Y) %*% X / nobs
+
   A.hist <- matrix(0, iter, p*q)
   B.hist <- matrix(0, iter, p*k)
   crit2.hist <- crit.hist <- rep(0, iter)

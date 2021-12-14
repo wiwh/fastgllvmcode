@@ -12,7 +12,7 @@
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL, X=NULL, scale=0.5){
+gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=NULL, X=NULL, scale=0.5){
   if(all(is.null(p), is.null(q), is.null(par)))
     stop("At least par, or both p and q, must be supplied.")
   if(!is.null(par)){
@@ -29,7 +29,7 @@ gen_gllvm <- function(n, family="normal", p=NULL, q=NULL, k=0, par=NULL, Z=NULL,
 
   dat <- gen_Y(par, Z, X, family)
 
-  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par)
+  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
 }
 
 gen_Z <- function(n, q){
@@ -74,10 +74,10 @@ gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL, scale=
     if(k==0){
       B <- matrix(0, p, 1)
     } else {
-      B <- matrix(rnorm(p*k), p, k)*scale
+      B <- matrix(runif(p*k, -1, 1), p, k)
     }
   }
-  list(A=A, B=B, Psi=Psi, dims=list(p=p, q=q, k=k), family=family)
+  list(A=A, B=B, Psi=Psi, family=family, p=p, q=q)
 }
 
 #' Modifies par with new parameters
