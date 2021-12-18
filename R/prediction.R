@@ -20,7 +20,7 @@ bernoulli.predict <- function(Y, par, X=NULL, maxiter=1000, eps=1e-5, verbose=F)
 
     latPart <- Z %*% t(par$A)
     linpar <- latPart + fixedPart
-    Z <- Z + .2*(-Z + (Y - sigmoid(linpar))%*%par$A)
+    Z <- Z + .05*(-Z + (Y - sigmoid(linpar))%*%par$A)
     crit <- mean((Z-Z.old)^2)
     conv <- crit < eps
     if(verbose)cat("\niter:", iter, crit, " conv ", conv)

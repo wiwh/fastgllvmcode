@@ -16,8 +16,8 @@ gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=N
   if(all(is.null(p), is.null(q), is.null(par)))
     stop("At least par, or both p and q, must be supplied.")
   if(!is.null(par)){
-    p <- par$dims$p
-    q <- par$dims$q
+    p <- par$p
+    q <- par$q
   } else {
     par <- gen_par(p, q, k, family, scale=scale)
   }
