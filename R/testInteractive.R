@@ -1,1 +1,0 @@
-if(interactive())print("INERACTIVE!")

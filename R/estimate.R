@@ -14,18 +14,30 @@ bernoulli.gradient <- function(Y, X, par){
 }
 
 #TODO : this must follow the recommendations
-get_learning_rate.seq <- function(learning_rate.start, learning_rate.end, iter, type="exp", reps=1, reps.decreased_rate=0.7){
-  learning_rate.seq <- rep(0, iter*reps)
-  for(j in 1:reps){
-    rho <- exp((log(learning_rate.end) - log(learning_rate.start))/(iter-1))
-    learning_rate.seq[((j-1)*iter+1):(j*iter)] <- learning_rate.start * rho**(0:(iter-1)) * reps.decreased_rate**(j-1)
+get_learning_rate.seq <- function(learning_rate.start, learning_rate.end, iter, type="exp", reps=1, reps.decreased_rate=0.5, alpha=0.7){
+  if(type=="exp"){
+    learning_rate.seq <- rep(0, iter*reps)
+    for(j in 1:reps){
+      rho <- exp((log(learning_rate.end) - log(learning_rate.start))/(iter-1))
+      learning_rate.seq[((j-1)*iter+1):(j*iter)] <- learning_rate.start * rho**(0:(iter-1)) * reps.decreased_rate**(j-1)
+    }
+    learning_rate.seq
+  } else if (type=="sa"){
+    learning_rate.seq <- rep(0, iter*reps)
+    for(j in 1:reps){
+      # alpha <- log(learning_rate.end/learning_rate.start)/log((1+5)/(iter+5))
+      rho <- learning_rate.start*(1+5)**alpha/(1:iter + 5)**alpha
+      rho <- rho * learning_rate.start / rho[1]
+      learning_rate.seq[((j-1)*iter+1):(j*iter)] <- rho * reps.decreased_rate**(j-1)
+    }
   }
   learning_rate.seq
 }
 
+
 # Estimate Bernoulli with Sample Paths method
 # TODO: add a no-intercept option
-bernoulli.estimate.sp <- function(Y, q, X=matrix(1, nrow(Y), 1), H=1, reps=1, iter=250, par.init=NULL, compute.Q=F, verbose=T, learning_rate.start=10, learning_rate.end=1){
+bernoulli.estimate.sp <- function(Y, q, X=matrix(1, nrow(Y), 1), H=1, reps=1, iter=250, par.init=NULL, compute.Q=F, verbose=T, learning_rate.start=10, learning_rate.end=1, learning_rate.type="exp", tol=1e-5){
     # get some dimensions
     nobs <- nrow(Y)
     p <- ncol(Y)
@@ -54,7 +66,7 @@ bernoulli.estimate.sp <- function(Y, q, X=matrix(1, nrow(Y), 1), H=1, reps=1, it
       set.seed(h+12312)
       matrix(rnorm(nobs*q), nobs, q)
     })
-    learning_rate.seq <- get_learning_rate.seq(learning_rate.start, learning_rate.end, iter)
+    learning_rate.seq <- get_learning_rate.seq(learning_rate.start, learning_rate.end, iter, type=learning_rate.type)
     A.old <- A
     for(i in 1:iter){
       # Corrected gradients
@@ -105,15 +117,22 @@ bernoulli.estimate.sp <- function(Y, q, X=matrix(1, nrow(Y), 1), H=1, reps=1, it
         crit.hist[i] <- norm(ESxK - SxK)
       }
       if(verbose)cat("\ni: ", i, " - norm:", crit.hist[i])
+      if(crit.hist[i] < tol) break()
     }
-    list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist)
+    par <- list(A=A,
+                B=B,
+                ifelse(exists("Psi"), Psi, rep(1, nrow(A))),
+                family="bernoulli",
+                p=nrow(A),
+                q=ncol(A))
+    list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, par=par)
 }
 
 
 
 # batch: False, or a proportion of observations to use every iterations
 # Estimate bernoulli with Stochastic Approximation
-bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batch=F, reps=4, reps.decreased_rate=0.7, learning_rate.start=20, learning_rate.end=.1, A.init=NULL, B.init=NULL, Psi=rep(1, ncol(Y)), compute.Q=F, verbose=T, tol=1e-5){
+bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batch=F, reps=4, reps.decreased_rate=0.7, learning_rate.start=20, learning_rate.end=.1, learning_rate.type="exp", A.init=NULL, B.init=NULL, Psi=rep(1, ncol(Y)), compute.Q=F, verbose=T, tol=1e-5){
   # get some parameter values
   nobs <- nrow(Y)
   p <- ncol(Y)
@@ -128,14 +147,14 @@ bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batc
   dir.cumul <- dir <- rep(0, p*q)
 
 
-  learning_rate.seq <- get_learning_rate.seq(learning_rate.start, learning_rate.end, iter, reps=reps, reps.decreased_rate = reps.decreased_rate)
+  learning_rate.seq <- get_learning_rate.seq(learning_rate.start, learning_rate.end, iter, reps=reps, reps.decreased_rate = reps.decreased_rate, type=learning_rate.type)
 
   # standardize Y and initialize parameters
   Ys <- scale(Y, scale=F)
-  Z <- matrix(rnorm(n.Z*q), n.Z, q)
 
   i <- 1
   while(i < (iter*reps)){
+    Z <- matrix(rnorm(n.Z*q), n.Z, q)
     i <- i+1
     # Corrected gradients
     Ap <- A/Psi
@@ -197,7 +216,14 @@ bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batc
       i <- inext
     }
   }
-  list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, crit.hist=crit.hist)
+
+  par <- list(A=A,
+              B=B,
+              ifelse(exists("Psi"), Psi, rep(1, nrow(A))),
+              family="bernoulli",
+              p=nrow(A),
+              q=ncol(A))
+  list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, crit.hist=crit.hist, par=par)
 }
 
 

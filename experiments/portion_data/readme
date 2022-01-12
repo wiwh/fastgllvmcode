@@ -1,0 +1,2 @@
+portion_data_results_gllvm are the first runs but we dismiss them because of bad results
+We only compare to gmf, and we re-ran all settings to get portion-data_results_small and large.

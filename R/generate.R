@@ -18,6 +18,7 @@ gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=N
   if(!is.null(par)){
     p <- par$p
     q <- par$q
+    k <- par$k
   } else {
     par <- gen_par(p, q, k, family, scale=scale)
   }
@@ -77,7 +78,7 @@ gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL, scale=
       B <- matrix(runif(p*k, -1, 1), p, k)
     }
   }
-  list(A=A, B=B, Psi=Psi, family=family, p=p, q=q)
+  list(A=A, B=B, Psi=Psi, family=family, p=p, q=q, k=k)
 }
 
 #' Modifies par with new parameters
