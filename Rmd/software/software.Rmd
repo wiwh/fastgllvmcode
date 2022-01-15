@@ -1,0 +1,37 @@
+---
+title: "Software"
+author: "Guillaume Blanc"
+date: "14/01/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Notes on the development of the software
+
+## fastgllvm class
+A `fastgllvm` object is an S3 class with the following minimum attributes
+
+* `class`: fastgllvm
+* `A`: loadings
+* `B`: fixed effect coefficients (defaults to 0)
+* `tau` : scale parameter
+
+The generator of the class, new_fastgllvm, takes arguments to create an object of class gllvm that facilitates the
+generation of gllvm models.
+
+```{r}
+new_fastgllvm <- function(){
+  a <- 1:5
+  class(a) <- "fastgllvm"
+  a
+}
+print.fastgllvm <- function(a){
+  print("haha, no print for this thing")
+}
+a <- new_fastgllvm()
+print(a)
+```
+

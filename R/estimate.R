@@ -216,13 +216,13 @@ bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batc
       i <- inext
     }
   }
-
   par <- list(A=A,
               B=B,
               ifelse(exists("Psi"), Psi, rep(1, nrow(A))),
               family="bernoulli",
               p=nrow(A),
-              q=ncol(A))
+              q=ncol(A),
+              k=k)
   list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, crit.hist=crit.hist, par=par)
 }
 

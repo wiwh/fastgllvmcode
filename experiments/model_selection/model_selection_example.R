@@ -51,7 +51,7 @@ get_best_models <- function(crit.value, M, n){
 
 
 
-# Function trying to maximize a criterion
+# Function trying to maximize a criterion via iterative GLLVM fits...
 # init must be a list with all the useful quantities...
 modelselec <- function(Y, X, family="gaussian", get_criterion=get_criterion_factory(Y, X, method="BIC", family=family), mod.gen=100, mod.keep=20, init=NULL, iter=100, prop.active.init=0.2){
   p <- ncol(X)
@@ -80,11 +80,8 @@ modelselec <- function(Y, X, family="gaussian", get_criterion=get_criterion_fact
     M.old <- M
     BIC.old <- BIC
 
-    #TODO: here we remove the intercept....
-    par$B <- rep(0, p)
-
     M <- gen_gllvm(mod.gen, par=par, family="bernoulli")$Y > 0
-    M <- M[rowSums(M)< (min(p, n)) & rowSums(M) >1, ]
+    M <- M[rowSums(M)< (min(p, n)) & rowSums(M) >1, ] # only take valid models
     BIC <- get_criterion(M)$crit
 
     # take the mod.keep best
@@ -95,27 +92,11 @@ modelselec <- function(Y, X, family="gaussian", get_criterion=get_criterion_fact
     M.hist[p*(i-1) + (1:p),] <- M
     BIC.hist[i,] <- BIC
 
-    # # keep the mod.keep best of all last models (maybe more?)
-    # M.best <- rbind(M.best, M)
-    # BIC.best <- c(BIC.best, BIC)
-    # Best.id <- order(BIC.best)[1:(mod.keep*(1+i *2/10))]  # increase the set of best models as we go
-    # M.best <- M.best[Best.id,]
-    # BIC.best <- BIC.best[Best.id]
-
-    # par(mfrow=c(1,3))
-    # boxplot(BIC)
-    # plot(gllvm.fit$B, beta)
-    # boxplot(rowSums(M))
-    # par(mfrow=c(1,1))
-
-    # update the fit based on the BEST OF ALL TIME, not just the last ones ?
-    # a <- rep(T, p)
-    # a[1:(p/2)] <- F
-    # b <- !a
     gllvm.fit <- bernoulli.estimate.ffa(M, q=q, A.init = par$A, B.init=par$B, reps=1, iter=2, verbose=F, tol=-1)
 
     # print some stuff
     cat("\niter:", i, "BIC reached:", min(BIC), " worst: ", max(BIC))
+    # boxplot(BIC)
   }
   list(Best=M, BIC.hist = BIC.hist, par=gllvm.fit$par)
 }
@@ -123,20 +104,14 @@ modelselec <- function(Y, X, family="gaussian", get_criterion=get_criterion_fact
 
 # Generate some data
 set.seed(2131)
-n <- 500
+n <- 1000
 p <- 100
 q <- 1
-beta01 <- c(rep(-2,4), rep(2,4), rep(0, p-8))
-beta02 <- c(rep(0, 8), beta01)[1:p]
-model.true <- t(beta01 != 0)
+beta0 <- c(rep(-2,4), rep(2,4), rep(0, p-8))
+model.true <- t(beta0 != 0)
 
-X01 <- matrix(rnorm(n*p), n, p)
-X02 <- matrix(rnorm(n*p), n, p)
-Y01 <- rbinom(n, 1, 1/(1+exp(-X01 %*% beta01)))
-Y02 <- rbinom(n, 1, 1/(1+exp(-X02 %*% beta02)))
-
-X0 <- rbind(X01, X02)
-Y0 <- c(Y01, Y02)
+X0 <- matrix(rnorm(n*p), n, p)
+Y0 <- rbinom(n, 1, 1/(1+exp(-X0 %*% beta0)))
 
 
 # add another half from another model
@@ -145,9 +120,9 @@ family <- binomial(link = "logit")
 get_criterion <- get_criterion_factory(Y0, X0, method="BIC", family=family)
 BIC.true <- get_criterion(model.true)$crit
 
-selec <- modelselec(Y0, X0, mod.gen = 50, mod.keep=500, prop.active.init = .2, family=family)
+selec <- modelselec(Y0, X0, mod.gen = 100, mod.keep=20, prop.active.init = .2, family=family)
 
-boxplot(t(selec$BIC.hist)[,1:68], main="boxplots of BICs as a function of passes")
+boxplot(t(selec$BIC.hist)[,1:68], main="boxplots of BICs as a function of runs.")
 abline(h=BIC.true, col=2)
 plot(colMeans(selec$Best))
 

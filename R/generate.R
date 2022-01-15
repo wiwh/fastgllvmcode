@@ -33,6 +33,11 @@ gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=N
   list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
 }
 
+
+
+
+
+
 gen_Z <- function(n, q){
   matrix(stats::rnorm(n*q), n, q)
 }
@@ -58,6 +63,7 @@ gen_Y <- function(par, Z, X, family){
   })
   list(Y=Y, natpar=natpar)
 }
+
 
 #' Generates parameters for a gllvm
 #'
