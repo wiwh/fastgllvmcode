@@ -33,8 +33,54 @@ gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=N
   list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
 }
 
+#' Generates data from a GLLVM model.
+#'
+#' Returns data of type gllvm.
+#'
+#' @param n the number of observations to draw
+#' @param p the number of manifest variables
+#' @param q the number of latent variables
+#' @param k the number of covariates common to all responses, k=0 yields an intercept of 0, while k=1 yields a random intercept for each response, and k>1 generates covariates.
+#' @param family one of "normal", "bernoulli", or a vector of both of size p, specifying individual responses' distribution
+#' @param par optional parameters in a list
+#' @param sigma sigma
+#'
+#' @return a list corresponding to the model
+#' @export
+gen_fastgllvm <- function(n=100, p=NULL, q=NULL, k=0, family="gaussian", par=NULL, Z=NULL, X=NULL, scale=0.5){
+  if(all(is.null(p), is.null(q), is.null(par)))
+    stop("At least par, or both p and q, must be supplied.")
+  if(!is.null(par)){
+    p <- par$p
+    q <- par$q
+    k <- par$k
+  } else {
+    par <- gen_par(p, q, k, family, scale=scale)
+  }
 
+  if (is.character(family))
+    family <- get(family, mode = "function", envir = parent.frame())
+  if (is.function(family))
+    family <- family()
+  if (is.null(family$family)) {
+    print(family)
+    stop("'family' not recognized")
+  }
 
+  if(is.null(Z)) Z <- gen_Z(n, q)
+  if(is.null(X)) X <- gen_X(n, k)
+  if(length(family)==1) family <- rep(family, p) # todo: at this point lead to a more efficient, dedicated function
+
+  dat <- gen_Y(par, Z, X, family)
+  fastgllvm <- new_fastgllvm(
+    A = dat$par$A,
+    B = dat$par$B,
+    phi = dat$par$phi,
+    family =
+  )
+
+  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
+}
 
 
 
@@ -50,6 +96,18 @@ gen_X <- function(n, k){
     X[,1] <- 1
   }
   X
+}
+
+gen_Y_singleFamily <- function(par, Z, X, family){
+  n <- nrow(Z)
+  p <- nrow(par$A)
+  natpar <- compute_natpar(par, Z, X)
+  Y <- sapply(1:p, function(j){
+    switch(family[j],
+      normal = rnorm(n, natpar[,j], par$Psi[j]),
+      bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
+  })
+  list(Y=Y, natpar=natpar)
 }
 
 gen_Y <- function(par, Z, X, family){
