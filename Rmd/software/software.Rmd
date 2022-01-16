@@ -35,3 +35,7 @@ a <- new_fastgllvm()
 print(a)
 ```
 
+There are two ways to create a `fastgllvm` object:
+
+1. By estimating some dataset using the function 
+2. 

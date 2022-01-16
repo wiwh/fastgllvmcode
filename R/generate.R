@@ -47,7 +47,7 @@ gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=N
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_fastgllvm <- function(n=100, p=NULL, q=NULL, k=0, family="gaussian", par=NULL, Z=NULL, X=NULL, scale=0.5){
+gen_fastgllvm <- function(n=100, p=NULL, q=NULL, k=0, family="gaussian", A=NULL, B=NULL, phi=NULL, Z=NULL, X=NULL, scale=0.5){
   if(all(is.null(p), is.null(q), is.null(par)))
     stop("At least par, or both p and q, must be supplied.")
   if(!is.null(par)){
@@ -58,14 +58,30 @@ gen_fastgllvm <- function(n=100, p=NULL, q=NULL, k=0, family="gaussian", par=NUL
     par <- gen_par(p, q, k, family, scale=scale)
   }
 
-  if (is.character(family))
-    family <- get(family, mode = "function", envir = parent.frame())
-  if (is.function(family))
-    family <- family()
-  if (is.null(family$family)) {
-    print(family)
-    stop("'family' not recognized")
+  for(i in seq_along(family)){
+    if (is.character(family[i]))
+      family[i] <- get(family[i], mode = "function", envir = parent.frame())
+    if (is.function(family[i]))
+      family[i] <- family[i]()
+    if (is.null(family[i]$family)) {
+      print(family[i])
+      stop("'family' not recognized")
+    }
   }
+  # generate the (p, q) matrix of loadings
+  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)*scale
+  # generate the vector of scale parameters
+  if(is.null(Psi)) Psi <- runif(p, 0.5, 2)
+  Psi[family=="bernoulli"] <- 1
+  # generate the (p, k) matrix of coefficients
+  if(is.null(B)){
+    if(k==0){
+      B <- matrix(0, p, 1)
+    } else {
+      B <- matrix(runif(p*k, -1, 1), p, k)
+    }
+  }
+
 
   if(is.null(Z)) Z <- gen_Z(n, q)
   if(is.null(X)) X <- gen_X(n, k)
@@ -98,25 +114,13 @@ gen_X <- function(n, k){
   X
 }
 
-gen_Y_singleFamily <- function(par, Z, X, family){
-  n <- nrow(Z)
-  p <- nrow(par$A)
-  natpar <- compute_natpar(par, Z, X)
-  Y <- sapply(1:p, function(j){
-    switch(family[j],
-      normal = rnorm(n, natpar[,j], par$Psi[j]),
-      bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
-  })
-  list(Y=Y, natpar=natpar)
-}
-
 gen_Y <- function(par, Z, X, family){
   n <- nrow(Z)
   p <- nrow(par$A)
   natpar <- compute_natpar(par, Z, X)
   Y <- sapply(1:p, function(j){
-    switch(family[j],
-      normal = rnorm(n, natpar[,j], par$Psi[j]),
+    switch(family[j]$family,
+      gaussian = rnorm(n, natpar[,j], par$Psi[j]),
       bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
   })
   list(Y=Y, natpar=natpar)
