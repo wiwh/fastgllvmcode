@@ -18,7 +18,6 @@
 #' @param family distribution as in the \code{\link{glm}} interface
 #'
 #' @return Returns the mean deviance omitting NA values
-#' @export
 #' @examples
 #' # In this example we compare a fitted model with a null model
 #' data = gmf.simulate(family=binomial())

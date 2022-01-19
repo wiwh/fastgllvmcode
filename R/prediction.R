@@ -31,7 +31,7 @@ bernoulli.predict <- function(Y, par, X=NULL, maxiter=1000, eps=1e-5, verbose=F)
 
 
 
-predict_z <- function(Y, par, X, family){
+predict_z <- function(Y, A, B, phi, X, family){
   offset <- X %*% t(par$B)
   z <- t(sapply(1:nrow(Y), function(i) glm(Y[i,]~ 0 + par$A, family=family, offset = offset[i,])$coef))
   z
@@ -39,8 +39,9 @@ predict_z <- function(Y, par, X, family){
 
 if(0){
   set.seed(2145)
-  g <- gen_gllvm(n = 100, p = 1000, q = 1, family = "bernoulli", k=5)
+  family <- binomial()
+  g <- gen_fastgllvm(n = 100, p = 1000, q = 1, family =family, k=5)
   # g$par$B <- g$par$B * 0
-  z <- predict_z(g$Y, g$par, g$X, family="binomial")
+  z <- with(g, predict_z(Y, A, B, phi, X, family))
   plot(z, g$Z); abline(0,1,col=2)
 }

@@ -1,6 +1,6 @@
 #' Generates data from a GLLVM model.
 #'
-#' Returns data of type gllvm.
+#' Returns a gllvm model of class fastglllvm with simulated data..
 #'
 #' @param n the number of observations to draw
 #' @param p the number of manifest variables
@@ -12,152 +12,116 @@
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_gllvm <- function(n=100, p=NULL, q=NULL, k=0, family="normal", par=NULL, Z=NULL, X=NULL, scale=0.5){
-  if(all(is.null(p), is.null(q), is.null(par)))
-    stop("At least par, or both p and q, must be supplied.")
-  if(!is.null(par)){
-    p <- par$p
-    q <- par$q
-    k <- par$k
+gen_fastgllvm <- function(n=100, p=5, q=1, k=1, family="gaussian", A=NULL, B=NULL, phi=NULL, Z=NULL, X=NULL, intercept=T){
+  if(is.null(A)){
+    if(is.null(p) | is.null(q)) stop("Either A, or p and q must be supplied.")
+    A <- matrix(runif(p*q,-2, 2), p, q)
   } else {
-    par <- gen_par(p, q, k, family, scale=scale)
+    stopifnot(is.matrix(A))
+    p <- nrow(A)
+    q <- ncol(A)
   }
-
-
-  if(is.null(Z)) Z <- gen_Z(n, q)
-  if(is.null(X)) X <- gen_X(n, k)
-  if(length(family)==1) family <- rep(family, p) # todo: at this point lead to a more efficient, dedicated function
-
-  dat <- gen_Y(par, Z, X, family)
-
-  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
-}
-
-#' Generates data from a GLLVM model.
-#'
-#' Returns data of type gllvm.
-#'
-#' @param n the number of observations to draw
-#' @param p the number of manifest variables
-#' @param q the number of latent variables
-#' @param k the number of covariates common to all responses, k=0 yields an intercept of 0, while k=1 yields a random intercept for each response, and k>1 generates covariates.
-#' @param family one of "normal", "bernoulli", or a vector of both of size p, specifying individual responses' distribution
-#' @param par optional parameters in a list
-#' @param sigma sigma
-#'
-#' @return a list corresponding to the model
-#' @export
-gen_fastgllvm <- function(n=100, p=NULL, q=NULL, k=0, family="gaussian", A=NULL, B=NULL, phi=NULL, Z=NULL, X=NULL, scale=0.5){
-  if(all(is.null(p), is.null(q), is.null(par)))
-    stop("At least par, or both p and q, must be supplied.")
-  if(!is.null(par)){
-    p <- par$p
-    q <- par$q
-    k <- par$k
-  } else {
-    par <- gen_par(p, q, k, family, scale=scale)
-  }
-
-  for(i in seq_along(family)){
-    if (is.character(family[i]))
-      family[i] <- get(family[i], mode = "function", envir = parent.frame())
-    if (is.function(family[i]))
-      family[i] <- family[i]()
-    if (is.null(family[i]$family)) {
-      print(family[i])
-      stop("'family' not recognized")
-    }
-  }
-  # generate the (p, q) matrix of loadings
-  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)*scale
-  # generate the vector of scale parameters
-  if(is.null(Psi)) Psi <- runif(p, 0.5, 2)
-  Psi[family=="bernoulli"] <- 1
-  # generate the (p, k) matrix of coefficients
   if(is.null(B)){
-    if(k==0){
-      B <- matrix(0, p, 1)
-    } else {
-      B <- matrix(runif(p*k, -1, 1), p, k)
-    }
+    if(is.null(p) | is.null(k)) stop("Either B, or p and k must be supplied")
+    B <- matrix(runif(p*k, -1, 1), p, k)  # this can be a matrix with 0 columns.
+  } else {
+    stopifnot(is.matrix(B))
+    stopifnot(nrow(B) == p)
+    k <- ncol(B)
+  }
+  if(is.null(phi)){
+    if(is.null(p)) stop("Either phi, or p must be supplied")
+    phi <- rep(1, p)
+  } else {
+    stopifnot(length(phi) == p)
   }
 
+  if (is.character(family))
+    family <- get(family, mode = "function", envir = parent.frame())
+  if (is.function(family))
+    family <- family()
+  if (is.null(family$family)) {
+    print(family)
+    stop("'family' not recognized")
+  }
 
   if(is.null(Z)) Z <- gen_Z(n, q)
-  if(is.null(X)) X <- gen_X(n, k)
-  if(length(family)==1) family <- rep(family, p) # todo: at this point lead to a more efficient, dedicated function
+  if(is.null(X)){
+    X <- gen_X(n, k, intercept)
+  } else {
+    if(intercept && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
+  }
+  if(intercept && k==0) warning("Intercept could not be added because k is set to 0. Set k=1 if intercept=True.")
+  dat <- gen_Y(A, B, phi, Z, X, family)
 
-  dat <- gen_Y(par, Z, X, family)
-  fastgllvm <- new_fastgllvm(
-    A = dat$par$A,
-    B = dat$par$B,
-    phi = dat$par$phi,
-    family =
-  )
-
-  list(Y=dat$Y, Z=Z, X=X, natpar=dat$natpar, par=par, n=n, p=p, q=q, k=k, scale=scale)
+  fastgllvm <- structure(list(
+    Y=dat$Y,
+    natpar=dat$natpar,
+    Z=Z,
+    X=X,
+    A=A,
+    B=B,
+    phi=phi,
+    family=family,
+    n=n,
+    p=p,
+    q=q,
+    k=k
+  ),class="fastgllvm")
+  validate_fastgllvm(fastgllvm)
+  fastgllvm
 }
-
-
 
 gen_Z <- function(n, q){
   matrix(stats::rnorm(n*q), n, q)
 }
 
-gen_X <- function(n, k){
-  if(k<=1){
-    X <- matrix(1, n, 1)
-  } else {
-    X <- matrix(stats::rnorm(n*k), n, k)
+
+#' Returns a function used to generate Z. This is solely used within gllvm.
+#'
+#' @param method: one of "SA" (always random), "SP" (fixed)
+#' @param H: number of draws to sample, usually set to 1 for SA and more for SP
+#'
+#' @return a function that returns a list of generated Z.
+generate_Z_functionfactory <- function(n, q, H=1, method="SA"){
+if(method == "SP"){
+    Z_saved <- lapply(1:H, function(na) matrix(rnorm(n*q), n, q))
+    generate_Z <- function(){
+      Z_saved
+    }
+  }
+  if(method == "SA"){
+    generate_Z <- function(){
+      lapply(1:H, function(na) matrix(rnorm(n*q), n, q))
+    }
+  }
+  generate_Z
+}
+
+
+gen_X <- function(n, k, intercept){
+  X <- matrix(rnorm(n*k), n, k)
+  if(k >= 1 && intercept){
     X[,1] <- 1
   }
   X
 }
 
-gen_Y <- function(par, Z, X, family){
+gen_Y <- function(A, B, phi, Z, X, family){
   n <- nrow(Z)
-  p <- nrow(par$A)
-  natpar <- compute_natpar(par, Z, X)
+  p <- nrow(A)
+  q <- ncol(A)
+  natpar <- compute_natpar(A, B, Z, X)
   Y <- sapply(1:p, function(j){
-    switch(family[j]$family,
-      gaussian = rnorm(n, natpar[,j], par$Psi[j]),
-      bernoulli = rbinom(n, 1, sigmoid(natpar[,j])))
+    switch(family$family,
+      gaussian = rnorm(n, natpar[,j], phi[j]),
+      binomial = rbinom(n, 1, family$linkinv(natpar[,j])),
+      poisson  = rpois(n, family$linkinv(natpar[,j]))
+    )
   })
   list(Y=Y, natpar=natpar)
 }
 
-
-#' Generates parameters for a gllvm
-#'
-#' returns a list of parameters.
-#'
-#'
-gen_par <- function(p, q, k=0, family="normal", A=NULL, B=NULL, Psi=NULL, scale=0.5){
-  # generate the (p, q) matrix of loadings
-  if(is.null(A)) A <- matrix(rnorm(p*q), p, q)*scale
-  # generate the vector of scale parameters
-  if(is.null(Psi)) Psi <- runif(p, 0.5, 2)
-  Psi[family=="bernoulli"] <- 1
-  # generate the (p, k) matrix of coefficients
-  if(is.null(B)){
-    if(k==0){
-      B <- matrix(0, p, 1)
-    } else {
-      B <- matrix(runif(p*k, -1, 1), p, k)
-    }
-  }
-  list(A=A, B=B, Psi=Psi, family=family, p=p, q=q, k=k)
-}
-
-#' Modifies par with new parameters
-#'
-change_par <- function(par, A=NULL, B=NULL, Psi=NULL){
-  if(!is.null(A)) par$A <- A
-  if(!is.null(B)) par$B <- B
-  if(!is.null(Psi)) par$Psi <- Psi
-  par
-}
-
-compute_natpar <- function(par, Z, X){
-  Z %*% t(par$A) + X %*% t(par$B)
+compute_natpar <- function(A, B, Z, X){
+  Z %*% t(A) + X %*% t(B)
 }

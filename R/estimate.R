@@ -1,16 +1,8 @@
-compute_K <- function(par){
-  A <- par$A
+get_K <- function(A, B, phi){
   p <- nrow(A)
   q <- ncol(A)
-  Psi <- par$Psi
-  Ap <- A/Psi
+  Ap <- A/phi
   solve(t(A)%*% Ap + diag(1, q)) %*% t(Ap)
-}
-
-# TODO: write this to make it clearer. Compue the gradient specifically for the Binary Data.
-# Then we can simply use any method.
-bernoulli.gradient <- function(Y, X, par){
-  # this should be everything needed to compute the gradient.
 }
 
 #TODO : this must follow the recommendations
@@ -226,70 +218,146 @@ bernoulli.estimate.ffa <- function(Y, q, X=matrix(1, nrow(Y), 1), iter=250, batc
   list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, crit.hist=crit.hist, par=par)
 }
 
-
-
-
-
-# Return the mean of the Bernoulli Random Variables.
-# Code that efficiently!
-bernoulli.mean <- function(theta, X, B, Z=NULL, seed=NULL, n=NULL){
-  if(is.null(Z) && is.null(n)) stop("Provide a value for Z or n.")
-  q <- ncol(theta)
-  p <- nrow(theta)
-  # if(exists(".Random.seed")){
-  #   INITIALSEED <- .Random.seed
-  #   lockBinding("INITIALSEED", environment())
-  #   on.exit(.Random.seed <<- INITIALSEED)
-  # }
-  if(!is.null(seed)) set.seed(seed)
-  if(is.null(Z)){
-    Z <- matrix(rnorm(n*q), n, q)
-  } else {
-    n <- nrow(Z)
-  }
-  linpar <- Z %*% t(theta) + X %*% t(B)
-  # matrices of conditional expectations (probabilities)
-  sigmoid(linpar)
+#' Returns the (Monte-Carlo) approximations of $E[Y]$ and $E[Y^\top Y]K^\top$.
+#' @param A: the matrix of loadings
+#' @param B: the matrix of fixed effect coefficients
+#' @param X: the matrix of covariates
+#' @param Z: a list of H generated Z samples
+#' @param K: the matrix so that $\hat Z = K Y$
+#' @param family: an object of class "family"
+get_expectations <- function(A, B, X, Z, K, family){
+  EY <- lapply(Z, function(Zh)family$linkinv(compute_natpar(A, B, Zh, X)))
+  EYYK <- lapply(EY, function(EYh){
+    EYh.c <- scale(EYh, scale=F)
+    EYYh.diag <- colSums(EYh.c^2) / (nrow(EYh.c))
+    EYh.mean <- attr(EYh.c, "scaled:center")
+    EYh.var <- family$variance(EYh.mean) * phi  # TODO: check that we need to multiply by phi... or how to model overdispersion here
+    EYYKh <- t(EYh.c) %*% (EYh.c %*% t(K/(nrow(EYh.c)-1)))
+    # The diagonal of EYZi is wrong. We need to replace its current value (EYYi.diag) by its true value (EYi.var).
+    # However, we do not want to compute EYY, so we remove its effect after the multiplication by t(K).
+    # t(K) is pre-multiplied because resp.var and EYYi.diag are vectors; it would be post-multiplied if they were
+    # diagonal matrices.
+    EYYKh <- EYZh + t(K) * (EYh.var - EYYh.diag)
+    EYYKh
+  })
+  list(
+    EY = Reduce("+", EY)/length(EY),
+    EYYK = Reduce("+", EYZ)/length(EYZ)
+  )
 }
 
+#' Returns the psi function approximated by H monte carlo samples
+#' @param Y: uncentered data
+#' @param Y.c: Y that are CENTERED, they must have an attribute named `scaled:center` that represent the removed mean
+#' @param A: the matrix of loadings
+#' @param B: the matrix of fixed effect coefficients
+#' @param phi: the vector of response-specific scale parameters
+#' @param X: the matrix of covariates
+#' @param family: an object of class "family"
+#' @param generate_Z a function returned by generate_Z_functionfactory that returns a list
+get_Psi <- function(Y, Y.c, A, B, phi, X, family, generate_Z){
+  stopifnot(!is.null(attr(Y.c, "scaled:center")))
+  K  <- get_K(A, B, phi)
+  Z  <- generate_Z()
+  Exp <- get_expectations(A, B, X, Z, K, family)
 
+  Psi <- list(
+    A = t(Y.c) %*% (Y.c %*% t(K/(nrow(Y.c)-1))) - Exp$EYYK,
+    B = t(Y - Exp$EY) %*% X/nrow(x),
+    phi = rep(0, p)  # TODO: implement
+  )
 
+  Psi
+}
 
-
-gradient_bernoulli_A <- function(Y, X, par){
+#' Returns a fitted object of class "fastgllvm".
+#' @param Y: a matrix of dimensions $n\times q$
+#' @param q: the number of latent variables
+#' @param X: either 0 (no covariates, no intercept), 1 (no covariates but an intercept), or a matrix of covariates. If the latter and an intercept is desired, it must be included in X as a column of 1.
+#' @param family: either one of ("gaussian", "poisson", "binomial"), the function name or the corresponding object of class "family" obtained by calling the function.
+#' @param family: one of "SA" or "SP"
+#' @param H: how many samples of Z to draw: if $\in (0,1)$, then a batch method is used and only that proportion of data is used to estimate the model.
+#'
+#' @export
+fastgllvm <- function(Y, q=1, X=1, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, iter=250, reps=4, reps.decreased_rate=0.7, learning_rate.start=20, learning_rate.end=.1, learning_rate.type="exp", verbose=T, tol=1e-5){
+  stopifnot(is.matrix(Y))
   n <- nrow(Y)
-  K <- compute_K(par)
-  Zstar <- Y %*% t(K)
-  natpar <- compute_natpar(par, Zstar, X)
-  t(Y - sigmoid(natpar)) %*% (Zstar/n)
+  p <- ncol(Y)
+
+  if(lengnth(X) == 1){
+    stopifnot(X == 0 | X == 1)
+    X <- matrix(X, n, 1)
+  }
+
+  k <- ncol(X)
+
+  if (is.character(family))
+    family <- get(family, mode = "function", envir = parent.frame())
+  if (is.function(family))
+    family <- family()
+  if (is.null(family$family)) {
+    print(family)
+    stop("'family' not recognized")
+  }
+
+
+  if(!is.null(A.init)) A <- A.init else A <- diag(1, p, q)
+  if(!is.null(B.init)) B <- B.init else B <- matrix(0, p, k)
+
+  A.hist <- matrix(0, reps*iter, p*q)
+  B.hist <- matrix(0, reps*iter, p*k)
+  phi.hist <- matrix(0, reps*iter, p)
+  crit.hist <- rep(0, iter)
+  # dir.cumul <- dir <- rep(0, p*q)
+
+
+  learning_rate.seq <- get_learning_rate.seq(learning_rate.start, learning_rate.end, iter, reps=reps, reps.decreased_rate = reps.decreased_rate, type=learning_rate.type)
+
+  Y.c <- scale(Y, scale=F)
+  generate_Z <- generate_Z_functionfactory(n, q, method=method, H=H)
+
+  i <- 0
+  while(i < (iter*reps)){
+    i <- i+1
+    Psi <- get_Psi(Y, Y.c, A, B, phi, X, family, generate_Z)
+
+    # udate A
+    A <- A + learning_rate.seq[i] * Psi$A
+    broken.A <- abs(A)>10
+    A[broken.A] <- 10 * sign(A[broken.A])
+
+    # update B
+    B  <- B + learning_rate.seq[i]/5 * Psi$B
+
+    # update phi
+    phi <- phi + learning_rate.seq[i] * Psi$phi
+
+    # save
+    A.hist[i, ] <- as.vector(A)
+    B.hist[i, ] <- as.vector(B)
+    phi.hist[i, ] <- as.vector(B)
+
+    if(verbose)cat("\ni: ", i, " - norm:", crit.hist[i], " - learning rate:", learning_rate.seq[i])
+    # check if the criterion is small enough to jump to the next "repetition", where the learning rate increases again
+    if(i<(iter*reps) && crit.hist[i] < tol){
+      # jump to next rep
+      reps.jumps <- iter*(1:reps)
+      inext <- reps.jumps[which(i < reps.jumps)[1]]
+      cat("\n\nnext!!!", inext)
+
+      # fill in the histories
+      A.hist[(i+1):inext,] <- matrix(rep(A.hist[i,], inext-i), nrow=(inext-i), byrow = T)
+      B.hist[(i+1):inext,] <- matrix(rep(B.hist[i,], inext-i), nrow=(inext-i), byrow = T)
+      i <- inext
+    }
+  }
+  par <- list(A=A,
+              B=B,
+              ifelse(exists("Psi"), Psi, rep(1, nrow(A))),
+              family="bernoulli",
+              p=nrow(A),
+              q=ncol(A),
+              k=k)
+  list(Y=Y, A=A, B=B, A.hist=A.hist, B.hist=B.hist, crit.hist=crit.hist, par=par)
 }
 
-# compute bernoulli probabilities
-compute_bernoulli_probabilities <- function(X, par){
-
-  natpar <- compute_natpar(par, Zstar, X)
-}
-
-
-# Estimate the Expected Gradient for the Loadings
-expected_gradient_bernoulli_A <- function(X, par, n=nrow(X)){
-  # TODO: this should use a faster version to generate the bernoulli RV
-  # TODO: We should not generate the Bernoullis, simply the Z and given Z, obtain the expected gradient directly
-  Y <- gen_gllvm(n, family="bernoulli", X=X, par=par)$Y
-  gradient_bernoulli_A(Y, X, par)
-}
-
-corrected_gradient_bernoulli_A <- function(Y, X, par){
-  grad <- gradient_bernoulli_A(Y, X, par)
-  Egrad <- expected_gradient_bernoulli_A(X, par)
-  grad - Egrad
-}
-
-
-profile_score_gllvm <- function(){
-
-}
-
-score_gllvm <- function(params){
-
-}
