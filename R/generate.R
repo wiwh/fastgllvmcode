@@ -12,7 +12,7 @@
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_fastgllvm <- function(n=100, p=5, q=1, k=1, family="gaussian", A=NULL, B=NULL, phi=NULL, Z=NULL, X=NULL, intercept=T){
+gen_fastgllvm <- function(n=100, p=5, q=1, k=0, family="gaussian", A=NULL, B=NULL, phi=NULL, X=NULL, Z=NULL, intercept=F){
   if(is.null(A)){
     if(is.null(p) | is.null(q)) stop("Either A, or p and q must be supplied.")
     A <- matrix(runif(p*q,-2, 2), p, q)
@@ -23,7 +23,11 @@ gen_fastgllvm <- function(n=100, p=5, q=1, k=1, family="gaussian", A=NULL, B=NUL
   }
   if(is.null(B)){
     if(is.null(p) | is.null(k)) stop("Either B, or p and k must be supplied")
-    B <- matrix(runif(p*k, -1, 1), p, k)  # this can be a matrix with 0 columns.
+    if(k == 0){
+      B <- matrix(0, p, 1)
+    } else {
+      B <- matrix(runif(p*k, -1, 1), p, k)  # this can be a matrix with 0 columns.
+    }
   } else {
     stopifnot(is.matrix(B))
     stopifnot(nrow(B) == p)
@@ -47,12 +51,24 @@ gen_fastgllvm <- function(n=100, p=5, q=1, k=1, family="gaussian", A=NULL, B=NUL
 
   if(is.null(Z)) Z <- gen_Z(n, q)
   if(is.null(X)){
-    X <- gen_X(n, k, intercept)
+    if(k==0){
+      X <- matrix(0, n, 1)
+      k <- 1
+    } else {
+      X <- gen_X(n, k, intercept)
+    }
   } else {
     if(intercept && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
   }
   if(intercept && k==0) warning("Intercept could not be added because k is set to 0. Set k=1 if intercept=True.")
   dat <- gen_Y(A, B, phi, Z, X, family)
+
+  hist <- list(
+    A = matrix(as.vector(A), 1, p*q),
+    B = matrix(as.vector(B), 1, p*k),
+    phi = matrix(phi, 1, p),
+    crit = rep(0, 1)
+  )
 
   fastgllvm <- structure(list(
     Y=dat$Y,
@@ -63,6 +79,7 @@ gen_fastgllvm <- function(n=100, p=5, q=1, k=1, family="gaussian", A=NULL, B=NUL
     B=B,
     phi=phi,
     family=family,
+    hist = hist,
     n=n,
     p=p,
     q=q,

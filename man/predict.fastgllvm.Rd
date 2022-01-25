@@ -4,10 +4,12 @@
 \alias{predict.fastgllvm}
 \title{Predict the latent variable Z from a gllvm, assuming it is multivariate normally distributed.}
 \usage{
-\method{predict}{fastgllvm}(fastgllvm)
+\method{predict}{fastgllvm}(fastgllvm, method = "ridge", lambda = 0.01)
 }
 \arguments{
-\item{fastgllvm}{an object of class "fastgllvm"}
+\item{fastgllvm:}{an object of class "fastgllvm"}
+
+\item{method:}{one of "glm" or "ridge" (default)}
 }
 \value{
 a n x q matrix of factors

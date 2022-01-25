@@ -4,16 +4,16 @@
 \alias{new_fastgllvm}
 \title{Generates a fastgllvm object}
 \usage{
-new_fastgllvm(A, B, phi, family, X)
+new_fastgllvm(Y, X, A, B, phi, family, hist)
 }
 \arguments{
+\item{X}{either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)}
+
 \item{A}{the matrix of loadings.}
 
 \item{B}{the matrix of fixed effect coefficients, of dimensions p * k}
 
 \item{phi}{a vector of scale parameters.}
-
-\item{X}{either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)}
 }
 \value{
 a list corresponding to the model
