@@ -15,7 +15,7 @@ get_K <- function(A, phi){
 get_expectations <- function(A, B, X, Z, K, phi, family){
   EY <- lapply(Z, function(Zh)family$linkinv(compute_natpar(A, B, Zh, X)))
   EYYK <- lapply(EY, function(EYh){
-    EYh.c <- scale(EYh, scale=F)
+    EYh.c <- scale(EYh, scale=F) # TODO HEREEEEEEEEEEEE
     # EYYh.diag <- colMeans(EYh.c^2)
     EYh.var <- colMeans(family$variance(EYh)) * phi # TODO: check that we need to multiply by phi... or how to model overdispersion here
     EYYKh <- t(EYh.c) %*% (EYh.c %*% t(K/nrow(EYh.c)))
@@ -67,7 +67,7 @@ get_Psi <- function(Y, Y.c, A, B, phi, X, family, generate_Z){
 #' @param H: how many samples of Z to draw: if in (0,1), then a batch method is used and only that proportion of data is used to estimate the model.
 #'
 #' @export
-fastgllvm <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = ifelse(method=="SA", "exp", "constant"), learning_rate.args = NULL, verbose=T){
+fastgllvm_old <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = ifelse(method=="SA", "exp", "constant"), learning_rate.args = NULL, verbose=T){
   stopifnot(is.matrix(Y))
   n <- nrow(Y)
   p <- ncol(Y)
@@ -173,7 +173,7 @@ fastgllvm <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=N
 #' @param H: how many samples of Z to draw: if in (0, 1), then a batch method is used and only that proportion of data is used to estimate the model.
 #'
 #' @export
-fastgllvm_oop <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = NULL, learning_rate.args = NULL, verbose=T){
+fastgllvm <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = NULL, learning_rate.args = NULL, verbose=T){
   stopifnot(is.matrix(Y))
   n <- nrow(Y)
   p <- ncol(Y)

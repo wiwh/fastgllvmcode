@@ -2,5 +2,5 @@
 
 S3method(predict,fastgllvm)
 export(fastgllvm)
-export(fastgllvm_oop)
+export(fastgllvm_old)
 export(gen_fastgllvm)

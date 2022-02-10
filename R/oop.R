@@ -111,7 +111,8 @@ fit_fastgllvm <- function(fastgllvm, method="SA", H=1, maxit=250, tol=1e-5, lear
     hist$phi <- rbind(hist$phi, matrix(0, maxit, p))
     hist$crit <- c(hist$crit, rep(0, maxit))
 
-    Y.c <- scale(Y, scale=F)
+    ################################################################################################################
+    Y.c <- scale(Y, scale=F)  # TODO CHANGE THIS BACK TODO
     generate_Z <- generate_Z_functionfactory(n, q, method=method, H=H)
 
     i <- 0

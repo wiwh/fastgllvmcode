@@ -16,7 +16,7 @@ fastgllvm(
   phi.init = NULL,
   maxit = 250,
   tol = 1e-05,
-  learning_rate = ifelse(method == "SA", "exp", "constant"),
+  learning_rate = NULL,
   learning_rate.args = NULL,
   verbose = T
 )
@@ -30,7 +30,7 @@ fastgllvm(
 
 \item{family:}{one of "SA" or "SP"}
 
-\item{H:}{how many samples of Z to draw: if in (0,1), then a batch method is used and only that proportion of data is used to estimate the model.}
+\item{H:}{how many samples of Z to draw: if in (0, 1), then a batch method is used and only that proportion of data is used to estimate the model.}
 }
 \description{
 Returns a fitted object of class "fastgllvm".
