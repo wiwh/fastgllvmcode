@@ -244,6 +244,7 @@ estimator <- function(Y, q){
 
 
 
+
 # gen data from another mechanism
 n <- 1000
 p <- 20
