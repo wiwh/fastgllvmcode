@@ -1,96 +1,17 @@
-# Constructor
-# -----------
-
-# new_fastgllvm is never actually used.
-#' Generates a fastgllvm object
-#'
-#' @param A the matrix of loadings.
-#' @param B the matrix of fixed effect coefficients, of dimensions p * k
-#' @param phi a vector of scale parameters.
-#' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
-#'
-#' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, A, B, phi, family, hist){
-  stopifnot(is.matrix(Y))
-  stopifnot(is.matrix(X))
-  stopifnot(is.matrix(A))
-  stopifnot(is.matrix(B))
-  stopifnot(is.vector(phi))
-  stopifnot(attr(family, "class")=="family")
-  stopifnot(is.list(hist))
-
-  n <- nrow(Y)
-  p <- nrow(A)
-  q <- ncol(A)
-  k <- ncol(B)
-  if(q >= p)
-    stop("The number of latent variables (q) must be strictly smaller than the number of observed variables (p).")
-  if(nrow(B) != p)
-    stop("The number of rows of B must be equal to the number of observed variables (p).")
-  if(!is.vector(phi) || length(phi) != p)
-    stop("phi must be a vector of length p.")
-
-  if(!is.matrix(X)){
-    if(X==0 & length(B) > 0)
-      stop("No intercept given, yet fixed effect coefficients are given. Should there be an intercept?")
-    if(X==1 & ncol(B) !=1)
-      stop("The dimensions of the fixed effect coefficients matrix B is inconsistent with the value of X implying only an intercept is required.")
-  } else {
-    if(nrow(X) != n || ncol(X) != k)
-      stop("X must be  either 0 or 1, or a matrix of dimensions p * k.")
-  }
-
-  fastgllvm <- structure(
-    list(Y=Y,
-        X=X,
-        A=A,
-        B=B,
-        phi=phi,
-        family=family,
-        n=nrow(Y),
-        p=nrow(A),
-        q=ncol(A),
-        k=ncol(X),
-        hist=hist),
-    class="fastgllvm")
-  fastgllvm
-}
-
-
-# validate a fastgllvm object
-validate_fastgllvm <- function(fastgllvm){
-  stopifnot(attr(family, "class")=="family")
-  with(fastgllvm,{
-    stopifnot(is.matrix(A))
-    stopifnot(is.matrix(B))
-    stopifnot(is.vector(phi))
-  })
-}
 
 # Methods
 # -------
 
 #' Predict the latent variable Z from a gllvm, assuming it is multivariate normally distributed.
 #'
-#' @param fastgllvm: an object of class "fastgllvm"
+#' @param f: an object of class "fastgllvm"
 #' @param method: one of "glm" or "ridge" (default)
 #'
 #' @return a n x q matrix of factors
+#'
 #' @export
-predict.fastgllvm <- function(fastgllvm, method="ridge", lambda=0.01){
-  with(fastgllvm, {
-    offset <- X %*% t(B)
-    if(method == "glm"){
-      Zhat <- t(sapply(1:nrow(Y), function(i) glm(Y[i,]~ 0 + A, family=family, offset = offset[i,])$coef))
-    }
-    if(method == "ridge"){
-      # here we add a column of 0 because glmnet doesn't allow a single variable to be estimated. We then remove the 0 coefficient.
-      Zhat <- t(sapply(1:nrow(Y), function(i) as.vector(glmnet(x=cbind(0, A), y=Y[i,], family=family, intercept=F, offset = offset[i,], alpha=0, lambda=lambda)$beta)[-1]))
-    }
-    dimnames(Zhat) <- NULL
-    if(dim(Zhat)[1] == 1) Zhat <- t(Zhat)
-    return(Zhat)
-  })
+predict.fastgllvm <- function(f, method=c("fastgllvm", "glm", "glmnet")){
+  compute_zstar(f$Y, f$A, f$linpar$XB, f$families)
 }
 
 fit_fastgllvm <- function(fastgllvm, method="SA", H=1, maxit=250, tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
@@ -188,7 +109,9 @@ plot_fastgllvm <- function(fastgllvm){
   par(mfrow=c(1,1))
 }
 
+#' Print a fastgllvm object
+#'
+#' @export
 print.fastgllvm <- function(fastgllvm){
-  print("Converged or not... blabla")
-  print(fastgllvm$A)
+  cat("test")
 }

@@ -1,0 +1,49 @@
+---
+title: "plot_class"
+author: "Guillaume Blanc"
+date: '2022-06-28'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Defining a plot method for a specific class
+
+Plotting requires the class to have specific structure
+
+First we define an arbitrary object, `myobj`, along with its class, `myclass`.
+
+```{r}
+myobj <- list(
+  x = 1:10,
+  y = sample(10)
+)
+class(myobj) <- c("myclass")
+```
+
+Plotting requires to define a method for the generic `plot` function. This is likewise easy:
+
+```{r}
+plot.myclass <- function(myobj){
+  plot(myobj$x, myobj$y, type="b")
+}
+print.myclass <- function(myobj){
+  cat("Myobj:", "\n\tx:", paste(myobj$x, collapse = ",\t"), "\n\ty:", paste(myobj$y, collapse=",\t"))
+}
+update.myclass <- function(myobj){
+  myobj$y[1] <- myobj$y[1]+1
+  myobj
+}
+```
+
+```{r}
+print(myobj)
+```
+
+
+```{r}
+plot(myobj)
+```
+

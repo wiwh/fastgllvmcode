@@ -173,7 +173,8 @@ fastgllvm_old <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.in
 #' @param H: how many samples of Z to draw: if in (0, 1), then a batch method is used and only that proportion of data is used to estimate the model.
 #'
 #' @export
-fastgllvm <- function(Y, q=1, X=0, family=binomial(), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = NULL, learning_rate.args = NULL, verbose=T){
+fastgllvm <- function(Y, q=1, X=0, family=c("gaussian", "binomial", "poisson"), method="SA", H=1, A.init=NULL, B.init=NULL, phi.init=NULL, maxit=250, tol=1e-5, learning_rate = NULL, learning_rate.args = NULL, verbose=T){
+  call <- this.call
   stopifnot(is.matrix(Y))
   n <- nrow(Y)
   p <- ncol(Y)
