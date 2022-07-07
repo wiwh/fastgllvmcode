@@ -8,9 +8,82 @@
 #' @param family: c("gaussian", "negbin", "poisson", "binomial"), or a named
 #' list of indices. See documentation.
 #' @param family: known parameters
-compute_psi <- function(Y, Z, X, A, B, phi, family, known_par) {
+compute_psi <- function (Y, Z, X, A, B, phi, families) {
+}
+
+compute_pi <- function(Y, Z, X, A, B, phi, families, maxit=100) {
+  # TODO: this can easily be palalellized
+  sol <- t(sapply(1:ncol(Y), function(j){
+    compute_glm(j, Y, Z, X, A, B, phi, families, maxit=maxit)
+  }))
+  A <- sol[, startsWith(colnames(sol), "A"), drop=F]
+  B <- sol[, startsWith(colnames(sol), "B"), drop=F]
+  phi <- sol[, startsWith(colnames(sol), "phi")]
+
+  list(A=A, B=B, phi=phi)
+}
+
+compute_glm <- function(j, Y, Z, X, A, B, phi, families, maxit=100) {
+  if(is.null(A) | is.null(B) | is.null(phi)) {
+    fit <- glm(Y[,j]~0+X+Z, family=families$vec[j], maxit=maxit)
+  } else {
+    fit <- glm(Y[,j]~0+X+Z, start=c(B[j,], A[j,]), family=families$vec[j], maxit=maxit)
+  }
+  B_j <- fit$coef[1:ncol(X)]
+  A_j <- fit$coef[(ncol(X)+1):length(fit$coef)]
+  phi_j <- 1
+  if (family=="gaussian") {
+    phi <- var(fit$residuals)
+  }
+  c(A_j=A_j, B_j=B_j, phi_j=phi_j)
+}
+
+compute_psi_AB <- function (Y, Z, X, B, A, phi, families, lambda=0) {
+  linpar <- compute_linpar(Z, A, X=X, B=B)
+  linpar_bprime <- compute_linpar_bprime(linpar$linpar, families)
+  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
+
+  psi_A <- do.call(rbind, lapply(1:ncol(Y), function(j){
+    as.vector(solve(
+      compute_psi_A_j_hessian(Z, phi[j], linpar_bprimeprime[,j]) - diag(lambda, ncol(Z)),
+      compute_psi_A_j(Y[,j], Z, phi[j], linpar_bprime[,j]) - lambda * A[j,]
+    ))
+  }))
+
+  # psi_B <- do.call(rbind, lapply(1:ncol(Y), function(j){
+  #   as.vector(solve(
+  #     compute_psi_A_j_hessian(X, phi[j], linpar_bprimeprime[,j]) + diag(lambda, ncol(Z)),
+  #     compute_psi_A_j(Y[,j], X, phi[j], linpar_bprime[,j]) + lambda * B[j,]
+  #   ))
+  # }))
+
+  # psi_AB <- do.call(rbind, lapply(1:ncol(Y), function(j){
+  #   as.vector(solve(
+  #     compute_psi_A_j_hessian(cbind(X, Z), phi[j], linpar_bprimeprime[,j]),
+  #     compute_psi_A_j(Y[,j], cbind(X,Z), phi[j], linpar_bprime[,j])
+  #   ))
+  # }))
+
+  list(psi_A=psi_A) #, psi_B=psi_B) #, psi_AB=psi_AB)
+}
+
+compute_psi_A_j <- function(Y_j, Z, phi_j, linpar_bprime_j){
+  (t(Z) %*% (Y_j - linpar_bprime_j))/phi_j
+}
+
+compute_psi_A_j_hessian <- function(Z, phi_j, linpar_bprimeprime_j){
+  -(t(Z) %*% (Z*(linpar_bprimeprime_j)))/phi_j
+}
+
+compute_psi_B <- function () {
 
 }
+
+
+compute_psi_phi <- function () {
+
+}
+
 
 # Computing zstar ---------------------
 
@@ -30,7 +103,7 @@ compute_psi <- function(Y, Z, X, A, B, phi, family, known_par) {
 
 #TODO: testthat: computes the same first step as glm starting at 0, for all family types.
 
-compute_zstar <- function(Y, A, phi, XB, families, dims, start=NULL, maxit=100, thresh=1e-3, save=F){
+compute_zstar <- function(Y, A, phi, XB, families, dims, start=NULL, maxit=100, thresh=1e-3, save=F, scale=F){
   if (is.null(start)) {
     Zstar <- compute_zstar_starting_values(Y, A, XB, families, dims)
   } else {
@@ -62,6 +135,7 @@ compute_zstar <- function(Y, A, phi, XB, families, dims, start=NULL, maxit=100, 
       compute_zstar_hessian(Y[!conv, , drop=F], A, phi, linpar[!conv, , drop=F], families)
     )
 
+    if (scale) Zstar <- scale_zstar(Zstar)
     if (save) hist[[i]] <- as.vector(Zstar)
 
     crit[!conv] <- rowMeans(abs(Zstar.old[!conv, , drop=F] - Zstar[!conv, , drop=F]))
@@ -102,6 +176,13 @@ compute_zstar_Hneg_score <- function(score, hessian){
   } else {
     score/hessian
   }
+}
+
+scale_zstar <- function(Z){
+  nq <- prod(dim(Z))
+  gaussian_quantiles <- qnorm((1:nq)/(nq+1)) # TODO: don't run that each time...
+  Z[order(Z)] <- gaussian_quantiles
+  Z
 }
 
 #' Compute Starting values for zstar.
@@ -172,16 +253,3 @@ compute_linpar_bprimeprime <- function(linpar, families) {
   linpar
 }
 
-if(0){
-  # TODO: test that this converges
-  set.seed(2131)
-  f <- gen_fastgllvm(n=1000, p <- 8, q=2, k=4, intercept=T, phi=c(rep(1, p/2), (1:(p/2))/1), family=list(binomial=1:(p/4), poisson=(p/4+1):(p/2), gaussian=(p/2+1):p))
-  f <- gen_fastgllvm(n=1000, p <- 10, q=1, k=1, intercept=F, phi=c(rep(1, p/2), (1:(p/2))/1), family=binomial)
-
-  Zstar <- compute_zstar(f$Y, f$A, f$phi, f$linpar$XB, f$families, f$dims, save=F, thresh=1e-3, start=f$Z)
-  plot(f$Z, Zstar$Zstar, main = paste("Converged in ", Zstar$niter, " iterations."))
-
-  par(mfrow=c(2,1))
-  qqnorm(Zstar$Zstar)
-  par(mfrow=c(1,1))
-}

@@ -166,7 +166,8 @@ generate_families <- function(family, p){
   # objects are required for later use
   families <- list(
     objects = list(),
-    id = list()
+    id = list(),
+    vec = vector(length=p)
   )
 
   if (!is.list(family)) {
@@ -187,8 +188,85 @@ generate_families <- function(family, p){
       get(family_name, mode = "function", envir = parent.frame())())
     names(families$objects) <- names(families$id)
   }
+  for (i in seq_along(families$id)) {
+    families$vec[families$id[[i]]] <- rep(families$objects[[i]]$family, length(families$id[[i]]))
+  }
   families
 }
+if(0){
+fastgllvm.fit <- function(Y, X, A.init=NULL, B.init=NULL, phi.init=NULL, Z.init=NULL, H=1, maxit=250 , tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
+  if(is.null(learning_rate)) learning_rate <- ifelse(method=="SA", "exp", "constant")
+  if(is.character(learning_rate)){
+    learning_rate <- ff_learning_rate(method=learning_rate, maxit=maxit, learning_rate.args = learning_rate.args)
+  }
+  learning_rate.seq <- learning_rate(1:maxit)
+  hist <- list(
+    A = list(),
+    B = list(),
+    phi = list(),
+    crit = list()
+  )
+
+  generate_Z <- generate_Z_functionfactory(n, q, method=method, H=H)
+
+  A <- A.init
+  B <- B.init
+  phi <- phi.init
+  Z <- generate_Z()[[1]]
+
+  sol <- compute_pi(Y=Y, Z=Z, X=X, A=A, B=B, phi=phi, families=families, maxit=100)
+  for(i in 1:100){
+  sol <- compute_pi(Y=Y, Z=Z, X=X, A=A, B=B, phi=phi, families=families, maxit=1)
+  sol$A <- psych::Procrustes(sol$A, f$A)$loadings
+  plot(f$A, sol$A)
 
 
+  A <- sol$A
+  B <- sol$B
+  phi <- sol$phi
+
+  Z <- compute_zstar(Y, A, phi, X %*% t(B), families, start=Z, dims, scale=F, maxit=1)$Zstar
+  print(diag(var(Z)))
+  }
+  plot(f$Z, Z)
+
+  i <- 0
+                          converged <- FALSE
+                        while(i < maxit & !converged){
+                          i <- i+1
+                          Psi <- get_Psi(Y, Y.c, A, B, phi, X, family, generate_Z)
+
+                          # udate A
+                          A <- A + learning_rate.seq[i] * Psi$A
+                          broken.A <- abs(A)>10
+                          A[broken.A] <- 10 * sign(A[broken.A])
+
+                          # update B
+                          B  <- B + learning_rate.seq[i] * Psi$B
+
+                          # update phi
+                          phi <- phi + learning_rate.seq[i] * Psi$phi
+
+                          # save
+                          hist$A[hist.i + i, ] <- as.vector(A)
+                          hist$B[hist.i + i, ] <- as.vector(B)
+                          hist$phi[hist.i + i, ] <- as.vector(phi)
+
+                          hist$crit[hist.i + i] <- learning_rate.seq[i] * norm(Psi$A)/(p*q)
+                          if(hist$crit[hist.i + i] < tol) converged <- TRUE
+
+                          if(verbose)cat("\ni: ", i, " - norm:", hist$crit[hist.i + i], " - learning rate:", learning_rate.seq[i])
+                          # check if the criterion is small enough to jump to the next "repetition", where the learning rate increases again
+                          if(converged){
+                            # fill in the histories
+                            hist$A <- hist$A[1:(hist.i + i),]
+                            hist$B <- hist$B[1:(hist.i + i),]
+                            hist$phi <- hist$phi[1:(hist.i + i),]
+                            hist$crit <- hist$crit[1:(hist.i + i)]
+                          }
+                        }
+  class(fastgllvm) <- "fastgllvm"
+  fastgllvm
+}
+}
 

@@ -14,67 +14,7 @@ predict.fastgllvm <- function(f, method=c("fastgllvm", "glm", "glmnet")){
   compute_zstar(f$Y, f$A, f$linpar$XB, f$families)
 }
 
-fit_fastgllvm <- function(fastgllvm, method="SA", H=1, maxit=250, tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
-  if(is.null(learning_rate)) learning_rate <- ifelse(method=="SA", "exp", "constant")
-  if(is.character(learning_rate)){
-    learning_rate <- ff_learning_rate(method=learning_rate, maxit=maxit, learning_rate.args = learning_rate.args)
-  }
-  learning_rate.seq <- learning_rate(1:maxit)
-  cat(nrow(fastgllvm$hist$A))
-  class(fastgllvm) <- NULL
-  fastgllvm <- within(fastgllvm,
-  {
-    hist.i <- nrow(hist$A)
-    cat(" - ", hist.i, " \n")
 
-    hist$A <- rbind(hist$A, matrix(0, maxit, p*q))
-    hist$B <- rbind(hist$B, matrix(0, maxit, p*k))
-    hist$phi <- rbind(hist$phi, matrix(0, maxit, p))
-    hist$crit <- c(hist$crit, rep(0, maxit))
-
-    ################################################################################################################
-    Y.c <- scale(Y, scale=F)  # TODO CHANGE THIS BACK TODO
-    generate_Z <- generate_Z_functionfactory(n, q, method=method, H=H)
-
-    i <- 0
-    converged <- FALSE
-    while(i < maxit & !converged){
-      i <- i+1
-      Psi <- get_Psi(Y, Y.c, A, B, phi, X, family, generate_Z)
-
-      # udate A
-      A <- A + learning_rate.seq[i] * Psi$A
-      broken.A <- abs(A)>10
-      A[broken.A] <- 10 * sign(A[broken.A])
-
-      # update B
-      B  <- B + learning_rate.seq[i] * Psi$B
-
-      # update phi
-      phi <- phi + learning_rate.seq[i] * Psi$phi
-
-      # save
-      hist$A[hist.i + i, ] <- as.vector(A)
-      hist$B[hist.i + i, ] <- as.vector(B)
-      hist$phi[hist.i + i, ] <- as.vector(phi)
-
-      hist$crit[hist.i + i] <- learning_rate.seq[i] * norm(Psi$A)/(p*q)
-      if(hist$crit[hist.i + i] < tol) converged <- TRUE
-
-      if(verbose)cat("\ni: ", i, " - norm:", hist$crit[hist.i + i], " - learning rate:", learning_rate.seq[i])
-      # check if the criterion is small enough to jump to the next "repetition", where the learning rate increases again
-      if(converged){
-        # fill in the histories
-        hist$A <- hist$A[1:(hist.i + i),]
-        hist$B <- hist$B[1:(hist.i + i),]
-        hist$phi <- hist$phi[1:(hist.i + i),]
-        hist$crit <- hist$crit[1:(hist.i + i)]
-      }
-    }
-  })
-  class(fastgllvm) <- "fastgllvm"
-  fastgllvm
-}
 
 simulate_fastgllvm <- function(fastgllvm, n=NULL){
   nsim <- ifelse(is.null(n), fit$n, n)
