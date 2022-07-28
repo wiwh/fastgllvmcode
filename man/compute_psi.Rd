@@ -4,7 +4,7 @@
 \alias{compute_psi}
 \title{Computes the psi function}
 \usage{
-compute_psi(Y, Z, X, A, B, phi, family, known_par)
+compute_psi(Y, Z, X, A, B, phi, families)
 }
 \arguments{
 \item{Y:}{n*p matrix of responses}

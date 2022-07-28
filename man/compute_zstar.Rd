@@ -14,7 +14,8 @@ compute_zstar(
   start = NULL,
   maxit = 100,
   thresh = 0.001,
-  save = F
+  save = F,
+  scale = F
 )
 }
 \arguments{

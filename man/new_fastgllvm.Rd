@@ -4,7 +4,16 @@
 \alias{new_fastgllvm}
 \title{Generates a fastgllvm object}
 \usage{
-new_fastgllvm(Y, X, A, B, phi, families, fit = list(), linpar = list())
+new_fastgllvm(
+  Y,
+  X,
+  Z,
+  parameters,
+  families,
+  dimensions,
+  linpar = NULL,
+  fit = list()
+)
 }
 \arguments{
 \item{X}{either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)}

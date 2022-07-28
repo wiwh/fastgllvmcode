@@ -1,0 +1,64 @@
+---
+title: "Dealing with NA"
+author: "Guillaume Blanc"
+date: "2022-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Dealing with NAs
+
+#### Computing the linear predictor with NA
+
+The linear predictor is of the type $Y A$ where $Y$  is a $n\times p$ matrix with 
+NA elements and $A$ is a $p\times q$ matrix.
+
+The linear predictor to compute Z, for instance, involves ignoring the NA
+
+```{r}
+set.seed(2131)
+n <- 100
+p <- 20
+q <- 2
+Y <- matrix(rnorm(n*p), n, p)
+Y[runif(n*p)<.1] <- NA
+A <- matrix(rnorm(p*q), p, q)
+
+compute_linpar_i <- function(Y, A, i) {
+  noNa <- !is.na(Y[i,])
+  t(A[noNa,]) %*% Y[i,noNa]
+}
+
+linpar1 <- t(sapply(1:n, function(i) compute_linpar_i(Y, A, i)))
+
+Yna <- Y
+Yna[is.na(Yna)] <- 0
+linpar2  <- Yna %*% A
+
+all.equal(linpar1, linpar2)
+
+```
+
+Another type of multiplication:
+
+```{r}
+phi <- Y[1,]
+
+t(A) %*% (A*phi)# I have this
+
+missing <- is.na(phi)
+
+phina <- phi
+phina[missing] <- 0
+a1 <- t(A) %*% (A*phina)# I have this
+
+a2 <- t(A[!missing,]) %*% diag(phi[!missing]) %*% A[!missing,]
+
+all.equal(a1,a2)
+
+```
+
+

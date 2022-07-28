@@ -4,7 +4,7 @@
 \alias{generate_y}
 \title{Generates responses from a gllvm, given all parameters and values}
 \usage{
-generate_y(linpar, phi, families, nobs, p, q)
+generate_y(linpar, phi, families)
 }
 \arguments{
 \item{A:}{loadings}

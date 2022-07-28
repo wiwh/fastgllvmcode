@@ -14,6 +14,13 @@ predict.fastgllvm <- function(f, method=c("fastgllvm", "glm", "glmnet")){
   compute_zstar(f$Y, f$A, f$linpar$XB, f$families)
 }
 
+# Plot the fastgllvm object
+#' @export
+plot.fastgllvm <- function(f){
+  if(length(f$fit) == 0) {
+    stop("Fit the model before attempting to plot.")
+  }
+}
 
 
 simulate_fastgllvm <- function(fastgllvm, n=NULL){

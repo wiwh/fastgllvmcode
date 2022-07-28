@@ -30,9 +30,56 @@ gen_binom_fast <- function(linpar, size, nobs, p){ # GEN BINOM FAST!
   }
 }
 
+
+#' Generates responses from a gllvm, given all parameters and values
+#'
+#' Returns a matrix Y
+#' @param A: loadings
+#' @param B: beta
+#' @param phi: scale parameters
+#' @param Z: nobs x q matrix of latent variables
+#' @param X: nobs x k design matrix
+#' @return a list corresponding to the model
+generate_y <- function(linpar, phi, families, A=NULL, B=NULL, X=NULL, Z=NULL, nobs=NULL, Miss=NULL) {
+  if (is.null(linpar)) {
+    if(is.null(Z)) {
+      Z <- gen_Z(nobs, ncol(A))
+    }
+    linpar <- compute_linpar(Z, A, X, B)$linpar
+  }
+  Y <- matrix(NA,nrow(linpar), ncol(linpar))
+  if(length(families$id$gaussian)>0){
+    Y[,families$id$gaussian] <- gen_norm(linpar[,families$id$gaussian], phi=phi[families$id$gaussian], nobs=nrow(linpar), p=length(families$id$gaussian))
+  }
+  if(length(families$id$binomial)>0){
+    Y[,families$id$binomial] <- gen_binom(linpar[,families$id$binomial], size=rep(1,length(families$id$binomial)), nobs=nrow(linpar), p=length(families$id$binomial))
+  }
+  if(length(families$id$poisson)>0){
+    Y[,families$id$poisson] <- gen_poisson(linpar[,families$id$poisson], nobs=nrow(linpar), p=length(families$id$poisson))
+  }
+  if(!is.null(Miss)) {
+    Y[Miss] <- NA
+  }
+  list(Y=Y, linpar=linpar, Z=Z)
+}
+
+
+gen_X <- function(nobs, k, intercept){
+  X <- matrix(rnorm(nobs*k), nobs, k)
+  if(k >= 1 && intercept){
+    X[,1] <- 1
+  }
+  X
+}
+
 gen_Z <- function(nobs, q){
   matrix(stats::rnorm(nobs*q), nobs, q)
 }
+
+
+
+# The next functions are not used and can be deleted.
+# ----------------
 
 #' Returns a function used to generate Z. This is solely used within gllvm.
 #'
@@ -55,35 +102,4 @@ if(method == "SP"){
   generate_Z
 }
 
-gen_X <- function(nobs, k, intercept){
-  X <- matrix(rnorm(nobs*k), nobs, k)
-  if(k >= 1 && intercept){
-    X[,1] <- 1
-  }
-  X
-}
 
-#' Generates responses from a gllvm, given all parameters and values
-#'
-#' Returns a matrix Y
-#' @param A: loadings
-#' @param B: beta
-#' @param phi: scale parameters
-#' @param Z: nobs x q matrix of latent variables
-#' @param X: nobs x k design matrix
-#' @param families: a named list with names, c("gaussian", "binomial", "poisson", "negbin"), of indices corresponding to the family of the responses.
-#' @param known_par: a named list with names, c("gaussian", "binomial", "poisson", "negbin"), of known parameters (used for the size "n" of binomial responses), appearing in the same order as the corresponding element in `families`
-#' @return a list corresponding to the model
-generate_y <- function(linpar, phi, families, nobs, p, q) {
-  Y <- matrix(NA,nobs,p)
-  if(length(families$id$gaussian)>0){
-    Y[,families$id$gaussian] <- gen_norm(linpar$linpar[,families$id$gaussian], phi=phi[families$id$gaussian], nobs=nobs, p=length(families$id$gaussian))
-  }
-  if(length(families$id$binomial)>0){
-    Y[,families$id$binomial] <- gen_binom(linpar$linpar[,families$id$binomial], size=rep(1,p), nobs=nobs, p=length(families$id$binomial))
-  }
-  if(length(families$id$poisson)>0){
-    Y[,families$id$poisson] <- gen_poisson(linpar$linpar[,families$id$poisson], nobs=nobs, p=length(families$id$poisson))
-  }
-  Y
-}
