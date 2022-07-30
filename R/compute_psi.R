@@ -286,20 +286,80 @@ update_parameters_new <- function(Y, X, Z, parameters, families, Miss, alpha, be
 
   # compute psi on this
   psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=F)
+  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
+
 
   # update
-
-  # Update AB: only hessian of Y_0
-  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
   AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
 
   phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
 
   parameters$A <-   parameters$A -   alpha * AB_update$A
   parameters$B <-   parameters$B -   alpha * AB_update$B
+  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
+
+  c(list(Z=psi_sam$Z), parameters)
+}
+
+
+# Update the parameters
+# Z is Z.start
+#' @parem exponential smoothing coefficient
+#' @return list(Z, parameters)
+update_parameters_new_double_hess <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
+  # Compute zhat on sample
+  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss)$Zstar
+  # rescale
+  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
+  parameters$A <- resc$A
+  Z0 <- resc$Z
+  rm(resc)
+
+  # Compute psi simulated
+  Y_sim <- generate_y(
+    linpar = NULL,
+    phi = parameters$phi,
+    families = families,
+    A = parameters$A,
+    B = parameters$B,
+    X = X,
+    Z = NULL,
+    nobs = nrow(Y),
+    Miss = Miss
+  )
+  # Obtain Zh
+  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
+
+
+  # rescale Zh
+  resc <- rescale(Zh, parameters$A, target.cov = parameters$covZ)
+
+  # update covZ
+  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(Zh)*(nrow(Zh)/(nrow(Zh) - 1))
+
+  Zh <- resc$Z
+  rm(resc)
+
+  # compute psi on this
+  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
+  AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
+  AB_update_sam <- AB_separate(AB_update_sam, ncol(parameters$A))
+  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
+  AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
+  AB_update_sim <- AB_separate(AB_update_sim, ncol(parameters$A))
+
+  # update
+
+  # Update AB: only hessian of Y_0
+  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
+  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
+  # AB_update <- AB_separate(AB_update, ncol(parameters$A))
+
+  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
+
+  parameters$A <-   parameters$A -   alpha * (AB_update_sam$A - AB_update_sim$A)
+  parameters$B <-   parameters$B -   alpha * (AB_update_sam$B - AB_update_sim$B)
   parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
 
   c(list(Z=psi_sam$Z), parameters)
@@ -579,13 +639,13 @@ compute_error <- function(A1, A2) {
 
 if(0) {
   devtools::load_all()
-  set.seed(14251)
+  set.seed(121)
   poisson  <- 0
   gaussian <- 0
-  binomial <- 20
-  q <- 1
+  binomial <- 50
+  q <- 3
   p <- poisson + gaussian + binomial
-  fg <- gen_fastgllvm(nobs=300, p=p, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=1, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_fastgllvm(nobs=500, p=p, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=1, intercept=T, miss.prob = 0, scale=1)
 
 
   zhat <- with(fg, compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, Miss=Miss))
@@ -604,9 +664,9 @@ if(0) {
 
   # continue with safe stuff
 
-  for(i in 1:50) {
+  for(i in 1:20) {
     A.old <- allpar$A
-    allpar <- update_parameters_rescale_biased(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=.5/sqrt(i), beta=0)
+    allpar <- update_parameters_rescale_biased(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=1/sqrt(i), beta=0)
     print(compute_error(allpar$A, fg$parameters$A))
     if(i%%5 == 1){
     # if(T){
@@ -622,7 +682,8 @@ if(0) {
 
   for(i in 1:50){
     A.old <- allpar$A
-    allpar <- update_parameters_new(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=.5/sqrt(i), beta=0)
+    # allpar <- update_parameters_new(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=1/(i**.2), beta=0)
+    allpar <- update_parameters_new_double_hess(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=.5/(i**.2), beta=0)
     # allpar <- update_parameters_new_2(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=.5/sqrt(i), beta=0)
     # allpar <- update_parameters_rescale(fg$Y, fg$X, allpar$Z, allpar, fg$families, fg$Miss, alpha=0.5/sqrt(i), beta=0)
 
@@ -651,12 +712,12 @@ if(0) {
   #
   library(gmf)
 
-  # fit.gmf <- gmf(fg$Y, X=fg$X, family=binomial(), p = q)
+  fit.gmf <- gmf(fg$Y, X=fg$X, family=binomial(), p = q)
   # fit.gmf <- gmf(fg$Y, X=fg$X, family=poisson(), p = q)
 
   library(mirtjml)
 
-  fit.mirtjml <- mirtjml_expr(fg$Y, K= q, tol = 1e-2)
+  fit.mirtjml <- mirtjml_expr(fg$Y, K= q, tol = 1e-3)
   compute_error(allpar$A, fg$parameters$A)
   compute_error(fit.gmf$v, fg$parameters$A)
   compute_error(fit.mirtjml$A_hat, fg$parameters$A)
