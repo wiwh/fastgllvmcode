@@ -91,10 +91,15 @@ gen_fastgllvm <- function(nobs=100,
                           X=NULL,
                           Z=NULL,
                           intercept=T,
+                          scale=1,
                           miss.prob=0){
 
   # Generate unspecified parameters
   parameters <- generate_parameters(A, B, phi, p, q, k)
+  if(scale!=1) {
+    parameters$A <- parameters$A * scale
+    parameters$B <- parameters$B * scale
+  }
   dimensions <- generate_dimensions(parameters)
 
 
@@ -116,7 +121,7 @@ gen_fastgllvm <- function(nobs=100,
 
   # Generate data
   linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
-  Y <- generate_y(linpar$linpar, parameters$phi, families)$Y
+  Y <- generate_y(linpar, parameters$phi, families)$Y
 
   if (miss.prob != 0) {
     Y[runif(prod(dim(Y))) < miss.prob] <- NA

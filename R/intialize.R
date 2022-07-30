@@ -58,12 +58,27 @@ init_Z <- function(Y, A, phi) {
   Y %*% (A/phi) %*% solve(t(A) %*% (A/phi))
 }
 # rescale Z to have unit diagonal variance, and A so that ZA remains the same value
-rescale <- function(Z, A) {
-  #TODO: rescale B as well here? if Z is not centered, recenter it and change B so that XB + ZA remains the same value
-  Z <- scale(Z, scale=F)
-  C <- chol((t(Z) %*% Z)/nrow(Z))
-  Z <- Z %*% solve(C)
-  A <- A %*% t(C)
+# target: a data matrix whose variance the transformed Z must match. If NULL, the variance is the identity matrix.
+rescale <- function(Z, A, target=NULL, target.cov=NULL) {
+  if (is.null(target) && is.null(target.cov)) {
+    #TODO: rescale B as well here? if Z is not centered, recenter it and change B so that XB + ZA remains the same value
+    Z <- scale(Z, scale=F)
+    C <- chol((t(Z) %*% Z)/nrow(Z))
+    Z <- Z %*% solve(C)
+    A <- A %*% t(C)
+  } else {
+    Z <- scale(Z, scale=F)
+    Z.c <- chol((t(Z) %*% Z)/nrow(Z))
+    if(is.null(target.cov)) {
+      target <- scale(target, scale=F)
+      target.c <- chol(t(target) %*% target/nrow(target))
+    } else {
+      target.c <- chol(target.cov)
+    }
+
+    Z <- Z %*% (solve(Z.c) %*% target.c)
+    A <- A %*% t(solve(target.c) %*% Z.c)
+  }
 
   # TODO: TEST THAT: Zt(A) (after centing Z) remains the same
   list(Z=Z, A=A)
@@ -80,4 +95,36 @@ if(0) {
   points(fg$Z, init$Z, col=2)
   points(fg$parameters$phi, init$phi, col=3)
   points(fg$parameters$B, init$B, col=4)
+
+
+  # TEST RESCALE
+  A <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
+  B <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
+
+  AA <- t(A) %*% A/nrow(A)
+  BB <- t(B) %*% B/nrow(B)
+
+  A.c <- chol(AA)
+  B.c <- chol(BB)
+
+  all.equal(t(A.c) %*% A.c, AA)
+  all.equal(t(B.c) %*% B.c, BB)
+
+  A.unit <- A %*% solve(A.c)
+  all.equal(t(A.unit) %*% A.unit/(nrow(A.unit)), diag(4))
+
+  A.B <- A %*% (solve(A.c) %*% B.c)
+  all.equal(t(A.B) %*% A.B/nrow(A.B), BB)
+
+  Z <- fg$Z
+  Z <- scale(Z, scale=F)
+  ZA.before <- Z %*% t(fg$parameters$A)
+
+  ZA.after <- rescale(Z, fg$parameters$A)
+  all.equal(ZA.before, ZA.after$Z %*% t(ZA.after$A))
+
+  X <- Z/2
+  ZA.after <- rescale(Z, fg$parameters$A, target=X)
+  all.equal(ZA.before, ZA.after$Z %*% t(ZA.after$A))
+  all.equal(cov(ZA.after$Z), cov(X))
 }

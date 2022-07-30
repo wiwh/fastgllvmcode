@@ -17,7 +17,13 @@
 
 #TODO: testthat: computes the same first step as glm starting at 0, for all family types.
 
-compute_zstar <- function(Y, A, phi, XB, families, start=NULL, maxit=100, thresh=1e-3, save=F, Miss=NULL, verbose=F){
+compute_zstar <- function(Y, A, phi, X, B, families, start=NULL, maxit=100, thresh=1e-3, save=F, Miss=NULL, verbose=F){
+  if(is.null(B)) {
+    XB <- NULL
+  } else {
+    XB <- X %*% t(B)
+  }
+
   if (is.null(start)) {
     Zstar <- compute_zstar_starting_values(Y, A, XB, families, Miss)
   } else {
@@ -168,12 +174,7 @@ if(0) {
   fg <- gen_fastgllvm(nobs=1000, p=1000, q=5, family=c(rep("poisson", 950), rep("gaussian", 20), rep("binomial",30)), k=0, intercept=F, miss.prob = 0.1)
 
   parameters.init <- initialize_parameters(fg, target=fg$parameters$A)
-  if(!is.null(parameters.init$B)) {
-    parameters.init$XB <- fg$X %*% t(parameters.init$B)
-  } else {
-    parameters.init$XB <- NULL
-  }
-  zhat <- compute_zstar(fg$Y, parameters.init$A, parameters.init$phi, parameters.init$XB, fg$families, Miss=fg$Miss)
+  zhat <- compute_zstar(fg$Y, parameters.init$A, parameters.init$phi, fg$X, parameters.init$B, fg$families, Miss=fg$Miss)
   plot(fg$parameters$A, parameters.init$A)
   points(fg$Z, zhat$Zstar, col=2); abline(0,1,col=3)
   # now we rescale.

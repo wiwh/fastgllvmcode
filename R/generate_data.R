@@ -45,17 +45,17 @@ generate_y <- function(linpar, phi, families, A=NULL, B=NULL, X=NULL, Z=NULL, no
     if(is.null(Z)) {
       Z <- gen_Z(nobs, ncol(A))
     }
-    linpar <- compute_linpar(Z, A, X, B)$linpar
+    linpar <- compute_linpar(Z, A, X, B)
   }
-  Y <- matrix(NA,nrow(linpar), ncol(linpar))
+  Y <- matrix(NA,nrow(linpar$linpar), ncol(linpar$linpar))
   if(length(families$id$gaussian)>0){
-    Y[,families$id$gaussian] <- gen_norm(linpar[,families$id$gaussian], phi=phi[families$id$gaussian], nobs=nrow(linpar), p=length(families$id$gaussian))
+    Y[,families$id$gaussian] <- gen_norm(linpar$linpar[,families$id$gaussian], phi=phi[families$id$gaussian], nobs=nrow(linpar$linpar), p=length(families$id$gaussian))
   }
   if(length(families$id$binomial)>0){
-    Y[,families$id$binomial] <- gen_binom(linpar[,families$id$binomial], size=rep(1,length(families$id$binomial)), nobs=nrow(linpar), p=length(families$id$binomial))
+    Y[,families$id$binomial] <- gen_binom(linpar$linpar[,families$id$binomial], size=rep(1,length(families$id$binomial)), nobs=nrow(linpar$linpar), p=length(families$id$binomial))
   }
   if(length(families$id$poisson)>0){
-    Y[,families$id$poisson] <- gen_poisson(linpar[,families$id$poisson], nobs=nrow(linpar), p=length(families$id$poisson))
+    Y[,families$id$poisson] <- gen_poisson(linpar$linpar[,families$id$poisson], nobs=nrow(linpar$linpar), p=length(families$id$poisson))
   }
   if(!is.null(Miss)) {
     Y[Miss] <- NA
