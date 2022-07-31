@@ -50,7 +50,7 @@ initialize_parameters <- function(fastgllvm, target=NULL, rescale=T) {
     setTxtProgressBar(pb, 1, title="Initialization Complete.")
     close(pb)
     # re-scale zhat and A
-    list(A=A, B=B, phi=phi, Z=Z)
+    list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
   })
 }
 
@@ -59,27 +59,32 @@ init_Z <- function(Y, A, phi) {
 }
 # rescale Z to have unit diagonal variance, and A so that ZA remains the same value
 # target: a data matrix whose variance the transformed Z must match. If NULL, the variance is the identity matrix.
-rescale <- function(Z, A, target=NULL, target.cov=NULL) {
-  if (is.null(target) && is.null(target.cov)) {
+rescale <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
+  Z <- scale(Z, scale=F)
+  b <- matrix(attr(Z, "scaled:center"), nrow=1)
+  if (is.null(target.data) && is.null(target.cov)) {
     #TODO: rescale B as well here? if Z is not centered, recenter it and change B so that XB + ZA remains the same value
-    Z <- scale(Z, scale=F)
     C <- chol((t(Z) %*% Z)/nrow(Z))
-    Z <- Z %*% solve(C)
-    A <- A %*% t(C)
+    Cneg <- solve(C)
+    Z <- Z %*% Cneg
+    if (!is.null(A)) A <- A %*% t(C)
   } else {
-    Z <- scale(Z, scale=F)
     Z.c <- chol((t(Z) %*% Z)/nrow(Z))
     if(is.null(target.cov)) {
-      target <- scale(target, scale=F)
+      target <- scale(target.data, scale=F)
       target.c <- chol(t(target) %*% target/nrow(target))
     } else {
       target.c <- chol(target.cov)
     }
 
-    Z <- Z %*% (solve(Z.c) %*% target.c)
-    A <- A %*% t(solve(target.c) %*% Z.c)
+    C <- solve(target.c) %*% Z.c
+    Cneg <- solve(Z.c) %*% target.c
+    Z <- Z %*% Cneg
+    if (!is.null(A)) A <- A %*% t(C)
   }
 
+  # add the rescaled bias (p.137 in blue book)
+  Z <- t(t(Z) + as.vector(b %*% Cneg))
   # TODO: TEST THAT: Zt(A) (after centing Z) remains the same
   list(Z=Z, A=A)
 }
@@ -88,7 +93,7 @@ if(0) {
   devtools::load_all()
   set.seed(1231)
   fg <- gen_fastgllvm(nobs=1000, p=1000, q=20, family=c(rep("poisson", 500), rep("gaussian", 0), rep("binomial", 500)), k=1, intercept=1, miss.prob = 0.5)
-  fg <- gen_fastgllvm(nobs=1000, p=100, q=1, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
+  fg <- gen_fastgllvm(nobs=1000, p=100, q=5, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
   init <- initialize_parameters(fg, target=fg$parameters$A, rescale=F)
 
   plot(fg$parameters$A, init$A); abline(0,1,col=2)
@@ -100,6 +105,7 @@ if(0) {
   # TEST RESCALE
   A <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
   B <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
+
 
   AA <- t(A) %*% A/nrow(A)
   BB <- t(B) %*% B/nrow(B)
@@ -116,8 +122,10 @@ if(0) {
   A.B <- A %*% (solve(A.c) %*% B.c)
   all.equal(t(A.B) %*% A.B/nrow(A.B), BB)
 
-  Z <- fg$Z
+
+
   Z <- scale(Z, scale=F)
+  Z <- fg$Z
   ZA.before <- Z %*% t(fg$parameters$A)
 
   ZA.after <- rescale(Z, fg$parameters$A)
