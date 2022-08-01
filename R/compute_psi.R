@@ -13,6 +13,11 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
   # rescale
   # A_old <- parameters$A
+  # TODO: optimize the rescaling for B too...
+  if(!is.null(parameters$B) && all(X[,1]==1)) {
+    Z0 <- scale(Z0, scale=F)
+    B[,1] <- B[,1]  - as.vector(parameters$A %*% attr(Z0, "scaled:center"))
+  }
   resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
   Z0 <- resc$Z
@@ -253,7 +258,7 @@ if(0) {
   devtools::load_all()
   set.seed(121234)
   poisson  <- 0
-  gaussian <- 100
+  gaussian <- 0
   binomial <- 100
   q <- 2
   p <- poisson + gaussian + binomial
@@ -301,8 +306,8 @@ if(0) {
   # fit.gllvm <- gllvm(y=fg$Y, x=fg$X, formula=~0+x, num.lv=1, family="binomial", sd.errors=F)
   #
   library(gmf)
-  fit.gmf <- gmf(fg$Y, X=fg$X, family=binomial(), p = q)
-  # fit.gmf <- gmf(fg$Y, X=fg$X, family=poisson(), p = q)
+  # fit.gmf <- gmf(fg$Y, X=fg$X, family=binomial(), p = q)
+  fit.gmf <- gmf(fg$Y, X=fg$X, family=poisson(), p = q)
 
   library(mirtjml)
 
@@ -330,7 +335,7 @@ if(0) {
 
   devtools::load_all()
   set.seed(1423)
-  poisson  <- 20
+  poisson  <- 100
   gaussian <- 0
   binomial <- 0
   p <- poisson + gaussian + binomial

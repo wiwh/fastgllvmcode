@@ -3,7 +3,7 @@
 #' @param q: the number of factors
 #' @param family: specifies the family. See below for more information.
 #' @param X: either `NULL` or a `n` timeis `k` matrix of covariates.
-#' @param intercept: a boolean (default:TRUE) indicating whether an intercept should be included in the model. If `X` is supplied and an intercept is desired, `X` must contain one column of ones to model the intercept.
+#' @param intercept: a boolean (default:TRUE) indicating whether an intercept should be included in the model. If `X` is supplied and an intercept is desired, the first column of `X` must be a vector of ones to model the intercept.
 #' @description
 #'
 #' @details
@@ -389,27 +389,30 @@ if(0) {
   devtools::load_all()
 
   family <- "binomial"
-  nobs <- 1000
+  nobs <- 500
   p <-  20
-  q <- 2
+  q <- 1
 
   fg <- gen_fastgllvm(nobs = nobs, p = p, q = q, intercept = T, family=family)
   set.seed(123)
   fit.fg <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls=list(alpha=1))
 
-  plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
-  plot(fg$par$A, psych::Procrustes(fit.fg$parameters$A, fg$parameters$A)$loadings); abline(0,1,col=2)
-  plot(fg$par$B, fit.fg$parameters$B); abline(0,1,col=2)
-  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
-  ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
-  ts.plot(fit.fg$fit$hist$B[,1:p])
-  ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
-  plot(fit.fg$fit$learning_rate)
 
 
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)
   compute_error(fit.m$A_hat, fg$parameters$A, rotate = T)
+
+  plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
+  plot(fg$par$A, psych::Procrustes(fit.fg$parameters$A, fg$parameters$A)$loadings); abline(0,1,col=2)
+  points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
+  plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)
+  points(fg$par$B, fit.m$d_hat, col=2)
+  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
+  ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
+  ts.plot(fit.fg$fit$hist$B[,1:p])
+  ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
+  plot(fit.fg$fit$learning_rate)
 
   # load a simulated dataset
   attach(data_sim)
@@ -419,8 +422,12 @@ if(0) {
 
   plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2)
   plot(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2)
-  compute_error(res$A_hat, data_sim$A, rotate = T)
   compute_error(fit.fg$parameters$A, data_sim$A, rotate = T)
+  compute_error(res$A_hat, data_sim$A, rotate = T)
+  plot(data_sim$d, fit.fg$parameters$B); abline(0,1,col=2)
+  points(data_sim$d, res$d_hat, col=2)
+  compute_error(fit.fg$parameters$B, matrix(data_sim$d))
+  compute_error(matrix(res$d_hat), matrix(data_sim$d))
 }
 if(0){
 
