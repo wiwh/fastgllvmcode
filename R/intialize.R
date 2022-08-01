@@ -1,8 +1,99 @@
+
+
+initialize_parameters <- function(A = NULL, B= NULL, phi=NULL, p, q, k) {
+  if (is.null(A)) A <- matrix(0, p, q)
+  if (is.null(B)) B <- matrix(0, p, k)
+  if (is.null(phi)) phi <- rep(1, p)
+  list(A = A, B = B, phi = phi)
+}
+
+initialize_controls <- function(controls) {
+  if (is.null(controls[["maxit"]])) controls$maxit <- 100
+  if (is.null(controls[["alpha"]])) controls$alpha <- 1
+  if (is.null(controls[["beta"]]))  controls$beta  <- 0
+  if (is.null(controls[["ma"]]))    controls$ma    <- .9
+  if (is.null(controls[["eps"]]))   controls$eps   <- 1e-3
+  if (is.null(controls[["safe.start"]]))   controls$safe.start   <- F
+  if (is.null(controls[["minit"]])) {
+    controls$minit <- min(20, 2/(1 - controls$ma))
+  } else {
+    if (controls$minit < 2/(1 - controls$ma)) warnings(paste0("It is recommended to set a minit of ", min(20, 2/(1 - controls$ma)), "or larger"))
+  }
+
+  if(controls$minit > controls$maxit) stop("Set a maxit larger than minit.")
+
+  controls
+}
+
+#' Function factory to return a function that generates a learning rate as a function of i
+#'
+#' @param method: the name of the method to use. One of "constant", "lin", "exp", "linexp", "spall".
+#' @param method.args: list of method arguments
+initialize_learning_rate <- function(method="constant", maxit, learning_rate.args=list()){
+  if(is.null(learning_rate.args))       learning_rate.args <- list()
+  if(is.null(learning_rate.args$start)) learning_rate.args$start <- 1
+  if(is.null(learning_rate.args$end))   learning_rate.args$end <- 0.005
+  if(is.null(learning_rate.args$constant)) learning_rate.args$constant <- 10
+
+  if(method=="constant"){
+    learning_rate <- function(i){
+      rep(learning_rate.args$constant, length(i))
+    }
+  }
+  if(method=="lin"){
+    lr <- with(learning_rate.args,
+               seq(start, end, l=maxit))
+    learning_rate <- function(i){
+      lr[i]
+    }
+  }
+  if(method=="exp"){
+    lr <- with(learning_rate.args, {
+      rho <- exp(log(end/start)/(maxit-1))
+      rep(start, maxit) * rho**(0:(maxit-1))
+    })
+    learning_rate <- function(i){
+      lr[i]
+    }
+  }
+  if(method=="linexp"){
+    if(is.null(learning_rate.args$weight.exp))learning_rate.args$weight.exp <- .5
+    lr.lin <- with(learning_rate.args,
+                   seq(start, end, l=maxit))
+    lr.exp <- with(learning_rate.args, {
+      rho <- exp(log(end/start)/(maxit-1))
+      rep(start, maxit) * rho**(0:(maxit-1))
+    })
+    lr <- (1-learning_rate.args$weight.exp) * lr.lin + learning_rate.args$weight.exp * lr.exp
+    learning_rate <- function(i){
+      lr[i]
+    }
+  }
+  if(method=="spall"){
+    if(is.null(learning_rate.args$rate)) learning_rate.args$rate <- 1000
+    lr <- with(learning_rate.args, {
+      b <- exp(log(end / start) / rate)
+      b <- (maxit * b - 1) / (1 - b)
+      start*((1+b)/(1:maxit + b))**rate
+    })
+    learning_rate <- function(i){
+      lr[i]
+    }
+  }
+  learning_rate
+}
+
+
+
 library(fastfactoranalysis)
 
-initialize_parameters <- function(fastgllvm, target=NULL, rescale=T) {
-  cat("\nInitializing...\n")
-  pb <- txtProgressBar(style=3, label="Initializing", width=40)
+#' Given a fastgllvm object, compute good intial values.
+#' @param fastgllvm: an object of class ''fastgllvm''
+#' @param target: if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target
+#' @param rescale: if true, both Z and A will be rescaled so that Z%*%t(A) remains unchanged but Z has variance identity.
+compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=T) {
+  pb <- txtProgressBar(style=3, width=40)
+  cat(" Initializing: ")
   with(fastgllvm, {
     # TODO: try initializing using gllvm
     Y.transformed <- Y
@@ -17,7 +108,9 @@ initialize_parameters <- function(fastgllvm, target=NULL, rescale=T) {
     NAs <- is.na(Y)
     Y.transformed[NAs] <- 0
 
-    setTxtProgressBar(pb, 0.2,  title="Initializing B")
+    setTxtProgressBar(pb, 0.2)
+    cat(" Initializing B...")
+
     # Initialize XB
     if(dimensions$k >0) {
       B <- t(lm(Y.transformed ~ 0+X)$coef) * (1+colMeans(NAs)) # TODO: ffa should initialize with missing values as well
@@ -29,17 +122,20 @@ initialize_parameters <- function(fastgllvm, target=NULL, rescale=T) {
     }
 
     setTxtProgressBar(pb, 0.4, title="Initializing A")
+    cat(" Initializing A and phi...")
     # Initialize A and phi
     fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=10) # TODO: there must be some Z here as well...
     A <- fit.ffa$loadings * (1+colMeans(NAs))  # TODO: make ffa work with NAs, but this trick is ok for initialization
     phi <- rep(1, dimensions$p)
     phi[families$id$gaussian] <- fit.ffa$communalites[families$id$gaussian]
 
+
     # go to target
     if (!is.null(target)) {
       A <- psych::Procrustes(A, target)$loadings
     }
     setTxtProgressBar(pb, 0.9, title="Initializing Z")
+    cat(" Initializing Z...")
     # initialize Z
     Z <- init_Z(Y.transformed, A, phi)
     if(rescale) {
@@ -48,6 +144,7 @@ initialize_parameters <- function(fastgllvm, target=NULL, rescale=T) {
       Z=rescaled$Z
     }
     setTxtProgressBar(pb, 1, title="Initialization Complete.")
+    cat(" Initialization complete.")
     close(pb)
     # re-scale zhat and A
     list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
@@ -94,7 +191,7 @@ if(0) {
   set.seed(1231)
   fg <- gen_fastgllvm(nobs=1000, p=1000, q=20, family=c(rep("poisson", 500), rep("gaussian", 0), rep("binomial", 500)), k=1, intercept=1, miss.prob = 0.5)
   fg <- gen_fastgllvm(nobs=1000, p=100, q=5, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
-  init <- initialize_parameters(fg, target=fg$parameters$A, rescale=F)
+  init <- compute_parameters_initial_values(fg, target=fg$parameters$A, rescale=F)
 
   plot(fg$parameters$A, init$A); abline(0,1,col=2)
   points(fg$Z, init$Z, col=2)
@@ -135,4 +232,18 @@ if(0) {
   ZA.after <- rescale(Z, fg$parameters$A, target=X)
   all.equal(ZA.before, ZA.after$Z %*% t(ZA.after$A))
   all.equal(cov(ZA.after$Z), cov(X))
+
+  # learning rate tests
+  devtools::load_all()
+  igrid <- 1:100
+  learning_rate <- initialize_learning_rate(method="spall", 100, learning_rate.args = list(rate=2, end=.01))
+  plot(igrid, learning_rate(igrid), main="spall")
+  learning_rate <- initialize_learning_rate(method="constant", 100)
+  plot(igrid, learning_rate(igrid), main="constant")
+  learning_rate <- initialize_learning_rate(method="lin", 100)
+  plot(igrid, learning_rate(igrid), main="lin")
+  learning_rate <- initialize_learning_rate(method="exp", 100)
+  plot(igrid, learning_rate(igrid), main="exp")
+  learning_rate <- initialize_learning_rate(method="linexp", 100)
+  plot(igrid, learning_rate(igrid), main="linexp")
 }

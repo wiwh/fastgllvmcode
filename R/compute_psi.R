@@ -1,311 +1,7 @@
-#' #' Computes the psi function
-#' #'
-#' #' @param Y: n*p matrix of responses
-#' #' @param Z: n*q matrix of latent variables
-#' #' @param X: n*k design matrix
-#' #' @param A: p*q loadings matrix
-#' #' @param B: p*k coefficients matrix
-#' #' @param family: c("gaussian", "negbin", "poisson", "binomial"), or a named
-#' #' list of indices. See documentation.
-#' #' @param family: known parameters
-#' compute_psi <- function (Y, Z, X, A, B, phi, families) {
-#' }
-
-
-update_parameters <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute psi sample
-  # parameters$A[,] <- matrix(rnorm(prod(dim(parameters$A))), nrow(parameters$A), ncol(parameters$A))/5
-  # browser()
-  psi_sam <- compute_psi_star(Y, X, Z, parameters, families, Miss, compute_hessian=T)
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-
-  # Update AB: only hessian of Y_0
-  psi_sim <- compute_psi_star(Y_sim$Y, X, Y_sim$Z, parameters, families, Miss, compute_hessian=T)
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * AB_update$A
-  parameters$B <-   parameters$B -   alpha * AB_update$B
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-
-  c(list(Z=psi_sam$Z), parameters)
-}
-
-update_parameters_rescale <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute psi sample
-  # parameters$A[,] <- matrix(rnorm(prod(dim(parameters$A))), nrow(parameters$A), ncol(parameters$A))/5
-  # browser()
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-
-  # TODO: rescale before or after computing the psi_sim??
-  psi_sim <- compute_psi_star_rescaled(Y_sim$Y, X, Y_sim$Z, parameters, families, Miss, compute_hessian=F, rescale.target=parameters$covZ)
-  #update covZ
-  psi_sam <- compute_psi_star_rescaled(Y, X, Z, parameters, families, Miss, compute_hessian=T, rescale.target=parameters$covZ)
-
-  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(psi_sim$Z)*(nrow(psi_sim$Z)/(nrow(psi_sim$Z) - 1))
-
-  # Update AB: only hessian of Y_0
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * AB_update$A
-  parameters$B <-   parameters$B -   alpha * AB_update$B
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-
-  c(list(Z=psi_sam$Z), parameters)
-}
-
-update_parameters_rescale_biased <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute psi sample
-  # parameters$A[,] <- matrix(rnorm(prod(dim(parameters$A))), nrow(parameters$A), ncol(parameters$A))/5
-  # browser()
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # update covZ
-  psi_sim <- compute_psi_star(Y_sim$Y, X, Y_sim$Z, parameters, families, Miss, compute_hessian=F)
-  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(psi_sim$Z)*(nrow(psi_sim$Z)/(nrow(psi_sim$Z) - 1))
-
-  # # compute Zstar on sample
-  # psi_sam <- compute_psi_star(Y, X, Z, parameters, families, Miss, compute_hessian=F)
-  # Z <- psi_sam$Z
-  #
-  # # rescale Z and A
-  # resc <- rescale(Z, A, target.cov = parameters$covZ)
-  # parameters$A <- resc$A
-  # Z <- resc$Z
-
-  # compute psi on this
-  # psi_sam <- compute_psi_star_rescaled(Y, X, Z, parameters, families, Miss, compute_hessian=T, rescale.target = parameters$covZ)
-  psi_sam <- compute_psi_star_rescaled(Y, X, Z, parameters, families, Miss, compute_hessian=T, rescale.target = diag(ncol(Z)))
-
-  # update
-  # Update AB: only hessian of Y_0
-  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * AB_update$A
-  parameters$B <-   parameters$B -   alpha * AB_update$B
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-  parameters$Z <- psi_sam$Z
-  parameters
-}
-
-update_parameters_new <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss)$Zstar
-  # rescale
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
-  rm(resc)
-
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-
-
-  # rescale Zh
-  resc <- rescale(Zh, target.cov = parameters$covZ)
-
-  # update covZ
-  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(Zh)*(nrow(Zh)/(nrow(Zh) - 1))
-  parameters$covZ <-cov(Zh)
-
-  Zh <- resc$Z
-  rm(resc)
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-
-
-  # update
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * AB_update$A
-  parameters$B <-   parameters$B -   alpha * AB_update$B
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-  parameters$Z <- psi_sam$Z
-
-  parameters
-}
-
 initialize_gradients <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
-
-compute_gradients_0 <- function(Y, X, parameters, families, Miss, debiase) {
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-  A_old <- parameters$A
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
-
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  covZ <- .9*parameters$covZ + .1 * cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-
-
-  # rescale Zh
-  resc <- rescale(Zh, target.cov = parameters$covZ)
-  Zh <- resc$Z
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-
-
-  # update
-  if(debiase) {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    # AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
-
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
-}
-
-compute_gradients_01 <- function(Y, X, parameters, families, Miss, debiase) {
-  A_old <- parameters$A
-  # begin by rescaling
-  resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  parameters$Z <- resc$Z
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-  # A_old <- parameters$A
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
-
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  covZ <- .9*parameters$covZ + .1 * cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-
-
-  # rescale Zh
-  resc <- rescale(Zh, parameters$A, target.cov = parameters$covZ)
-  Zh <- resc$Z #
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-
-
-  # update
-  if(debiase) {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    # AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
-
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
-}
-
-compute_gradients_02 <- function(Y, X, parameters, families, Miss, debiase) {
+compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   A_old <- parameters$A
   # begin by rescaling
   resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
@@ -360,59 +56,6 @@ compute_gradients_02 <- function(Y, X, parameters, families, Miss, debiase) {
     AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
   }
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
-
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
-}
-compute_gradients_1 <- function(Y, X, parameters, families, Miss, debiase) {
-  A_old <- parameters$A
-  # begin by rescaling
-  resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  parameters$Z <- resc$Z
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-  # Z0 <- rescale(Z0, target.cov=parameters$covZ)$Z
-
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  covZ <- .9*parameters$covZ + .1 * cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-
-  # Zh <- rescale(Zh, target.cov=parameters$covZ)$Z
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-
-  # update
-  if(debiase) {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    # AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    # AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
   phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
 
   Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
@@ -420,145 +63,6 @@ compute_gradients_1 <- function(Y, X, parameters, families, Miss, debiase) {
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 
-
-compute_gradients_2 <- function(Y, X, parameters, families, Miss, debiase) {
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  covZ <- .9*parameters$covZ + .1 * cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-  Z0 <- rescale(Z0, target.cov=parameters$covZ)$Z
-
-  # rescale Zh
-  resc <- rescale(Zh, target.cov = parameters$covZ)
-  Zh <- resc$Z
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-
-
-  # update
-  if(debiase) {
-    AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
-
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
-}
-# Identity rescaled
-compute_gradients_3 <- function(Y, X, parameters, families, Miss, debiase) {
-  # Obtain Zh
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale Zh
-  para_sam <- parameters
-  resc <- rescale(Z0, para_sam$A)
-  Z0 <- resc$Z
-  para_sam$A <- resc$A
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, para_sam, families, Miss, compute_hessian=T)
-
-
-  # DO the same on generated dataset
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-
-  # Compute zhat on sample
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # rescale
-  para_sim <- parameters
-  resc <- rescale(Zh, para_sim$A)
-  Zh <- resc$Z
-  para_sim$A <- resc$A
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, para_sim, families, Miss, compute_hessian=T)
-
-  # update
-  if(debiase) {
-    AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
-
-  Z_update <- parameters$Z - Z0
-
-  list(A = -para_sam$A+para_sim$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=0)
-}
-# rescaled only
-compute_gradients_4 <- function(Y, X, parameters, families, Miss, debiase) {
-  # Obtain Zh
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale Zh
-  Z0 <- rescale(Z0, target.cov = parameters$covZ)$Z
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-
-  # DO the same on generated dataset
-  # Generate sim
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-
-  Z_sim <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  covZ <- .9 * parameters$covZ + .1 * cov(Z_sim)
-  covZ_update <- parameters$covZ -covZ
-
-  # update
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- rep(0, ncol(Y))
-
-  Z_update <- parameters$Z - Z0
-
-  list(A = AB_update$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
-}
-# rescaled
 update <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, debiase=T, compute_gradients=NULL) {
   if(is.null(compute_gradients)) stop("Provide a gradient function")
   # compute gradients
@@ -569,128 +73,17 @@ update <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, deb
   if(any(names(gradients_new) != names(gradients))) stop("Gradients and gradients_new are not the same") # TODO: remove this check once everything is done
   # exponential smoothing step
   for (par in names(parameters)) {
+    if(is.null(gradients_new[[par]])) next()
     gradients_new[[par]] <- beta * gradients[[par]] + (1-beta) * gradients_new[[par]]
   }
   # update step
   for (par in names(parameters)) {
+    if(is.null(gradients_new[[par]])) next()
     parameters[[par]] <- parameters[[par]] - alpha * gradients_new[[par]]
   }
   list(parameters=parameters, gradients=gradients_new)
 }
 
-update_parameters_new_double_hess <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss)$Zstar
-  # rescale
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
-  rm(resc)
-
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-
-
-  # rescale Zh
-  resc <- rescale(Zh, parameters$A, target.cov = parameters$covZ)
-
-  # update covZ
-  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(Zh)*(nrow(Zh)/(nrow(Zh) - 1))
-
-  Zh <- resc$Z
-  rm(resc)
-
-  # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  AB_update_sam <- AB_separate(AB_update_sam, ncol(parameters$A))
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
-  AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-  AB_update_sim <- AB_separate(AB_update_sim, ncol(parameters$A))
-
-  # update
-
-  # Update AB: only hessian of Y_0
-  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-  # AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * (AB_update_sam$A - AB_update_sim$A)
-  parameters$B <-   parameters$B -   alpha * (AB_update_sam$B - AB_update_sim$B)
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-
-  parameters$Z <- psi_sam$Z
-
-  parameters
-}
-
-update_parameters_new_2 <- function(Y, X, Z, parameters, families, Miss, alpha, beta) {
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss)$Zstar
-  # rescale
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
-  rm(resc)
-
-  # Compute psi simulated
-  Y_sim <- generate_y(
-    linpar = NULL,
-    phi = parameters$phi,
-    families = families,
-    A = parameters$A,
-    B = parameters$B,
-    X = X,
-    Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
-  )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-
-
-  # rescale Zh
-  resc <- rescale(Zh, parameters$A, target.cov = parameters$covZ)
-
-  # update covZ
-  parameters$covZ <- 0.9*parameters$covZ + .1 * cov(Zh)*(nrow(Zh)/(nrow(Zh) - 1))
-
-  Zh <- resc$Z
-  rm(resc)
-
-  # compute psi on this
-  psi_sam <- compute_psi_star(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=F)
-
-
-  # Update AB: only hessian of Y_0
-  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-  AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-
-  AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  phi_update <- psi_sam$psi_phi - psi_sim$psi_phi
-
-  parameters$A <-   parameters$A -   alpha * AB_update$A
-  parameters$B <-   parameters$B -   alpha * AB_update$B
-  parameters$phi <- parameters$phi - alpha * phi_update #TODO: should be + without the hessian no?
-
-  c(list(Z=psi_sam$Z), parameters)
-}
 
 ZX_join <- function(Z, X) {
   if (is.null(X)) {
@@ -787,40 +180,6 @@ compute_psi_star_known_Z <- function(Y, X, Z, parameters, families, Miss, comput
 
   list(psi_AB = psi_AB, psi_phi = psi_phi, psi_AB_hessian = psi_AB_hessian, linpar=linpar, Z=Z)
 }
-
-#This returns a list of high-level updates for the parameter
-compute_psi_star_rescaled <- function(Y, X, Z, parameters, families, Miss, compute_hessian, Z.maxit=100, rescale.target=NULL) {
-  # overhead computations
-  if(!is.null(parameters$B)){
-    XB <- X %*% t(parameters$B)
-  } else {
-    XB <- NULL
-  }
-  # Imputing step: compute Zstar
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss, verbose=F, maxit=Z.maxit)$Zstar
-
-  # rescale Zstar to target
-  resc <- rescale(Z0, parameters$A, target.cov=rescale.target)
-  Z <- resc$Z
-
-  linpar <- compute_linpar(Z, parameters$A, XB=XB)
-  linpar_bprime <- compute_linpar_bprime(linpar$linpar, families)
-  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-
-  ZX <- ZX_join(Z, X)
-  #compute psi_star_AB
-  psi_AB <- compute_psi_AB(Y, ZX, parameters$phi, linpar_bprime, Miss=Miss)
-  psi_phi <- rep(0, length(parameters$phi)) # TODO...
-
-  if(compute_hessian) {
-    psi_AB_hessian <- compute_psi_AB_hessian(ZX, parameters$phi, linpar_bprimeprime, Miss)
-  } else {
-    psi_AB_hessian <- NULL
-  }
-
-  list(psi_AB = psi_AB, psi_phi = psi_phi, psi_AB_hessian = psi_AB_hessian, linpar=linpar, Z=Z0)
-}
-
 compute_hessian_x_psi <- function(AB_psi, AB_hessian) {
   prod <- sapply(seq_along(AB_hessian), function(j) {
     as.vector(solve(AB_hessian[[j]], AB_psi[j,]))
@@ -868,17 +227,10 @@ compute_psi_AB_test <- function(Y, ZX, phi, linpar_bprime, Miss){
   diag(1/phi) %*% t(Y - linpar_bprime) %*% ZX
 }
 
-compute_psi_AB_j <- function(Y_j, ZX, phi_j, linpar_bprime_j){
-  (t(ZX) %*% (Y_j - linpar_bprime_j))/phi_j
-}
-
 compute_psi_phi <- function () {
 
 }
 
-compute_AB_initial_values <- function() {
-  #consider running the glm below
-}
 
 compute_A_glm <- function(Y, Z, X, families, maxit=100) {
   ZX <- ZX_join(Z, X)
@@ -888,52 +240,46 @@ compute_A_glm <- function(Y, Z, X, families, maxit=100) {
   do.call(rbind, fit)
 }
 
-compute_error <- function(A1, A2) {
+compute_error <- function(A1, A2, rotate=F) {
   if(any(dim(A1)!=dim(A2))) stop("Dimensions unequal.")
-  A1 <- psych::Procrustes(A1, A2)$loadings
+  if(rotate) A1 <- psych::Procrustes(A1, A2)$loadings
   norm(A1 - A2, type="F")/(norm(A1, type="F") + norm(A2, type="F"))
 }
 
 # Update experiments
 # ---------
 
-
 if(0) {
   devtools::load_all()
   set.seed(121234)
   poisson  <- 0
-  gaussian <- 0
-  binomial <- 20
-  q <- 1
+  gaussian <- 100
+  binomial <- 100
+  q <- 2
   p <- poisson + gaussian + binomial
   fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)),k=1, intercept=T, miss.prob = 0, scale=1)
 
   #TODO: problem with missing value when q=1
+  values <- list(parameters = compute_parameters_initial_values(fg, rescale=F))
+  values <- c(values, list(gradients = initialize_gradients(values$parameters)))
 
-  parameters <- initialize_parameters(fg, rescale=F)
-  gradients  <- initialize_gradients(parameters)
-  values <- list(parameters = parameters, gradients = gradients)
+  compute_gradients_function <- compute_gradients
 
-  final <- parameters
-
-  # compute_gradients_02 IS THE BEST
-  compute_gradients <- compute_gradients_02
-
-  for(i in 1:100){
-    A_old <- final$A
+  params_hist <- list()
+  moving_average <- values$parameters
+  for(i in 1:50){
+    moving_average_old <- moving_average
     if(i==10) print("Changing to debiase now!")
     if(i < 10) {
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1/sqrt(i), beta=0.8, debiase=F, compute_gradients = compute_gradients)
+      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=0, debiase=T, compute_gradients = compute_gradients_function)
     } else {
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1/sqrt(i), beta=0.8, debiase=T,  compute_gradients = compute_gradients)
+      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=2/(2+i**.8), beta=0.2, debiase=T,  compute_gradients = compute_gradients_function)
     }
 
     for(k in seq_along(parameters)){
-      final[[k]] <- final[[k]] * .9 + values$parameters[[k]] * .1
+      moving_average[[k]] <- moving_average[[k]] * .9 + values$parameters[[k]] * .1
     }
-
-    # print(compute_error(final$A, fg$parameters$A))
-    err <- compute_error(final$A, A_old)
+    err <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
     print(err)
     if(i > 20 & err<1e-3) break()
     # print(values$parameters$covZ)
@@ -945,103 +291,36 @@ if(0) {
       plot(fg$parameters$B, values$parameters$B, ylim=c(-3,3), xlim=c(-3,3)); abline(0,1,col=2)
       par(mfrow=c(1,1))
     }
+    params_hist <- c(params_hist, list(as.vector(values$parameters$A)))
   }
-
-
-  # zhat <- with(fg, compute_zstar(Y, parameters$A, parameters$phi, linpar$XB, families, Miss=Miss))
-
-  # improving
-  for(i in 1:10) {
-    A.old <- parameters$A
-    parameters <- update_parameters_rescale_biased(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=.5/sqrt(i), beta=0)
-    print(compute_error(parameters$A, fg$parameters$A))
-    if(i%%5 == 1){
-    # if(T){
-      Sys.sleep(.5)
-      par(mfrow=c(2,1))
-      plot(fg$parameters$A, psych::Procrustes(parameters$A, fg$parameters$A)$loadings, ylim=c(-5,5), xlim=c(-3,3)); abline(0,1,col=1)
-      plot(fg$Z, parameters$Z, ylim=c(-3,3), xlim=c(-3,3)); abline(0,1,col=2); abline(0,-1,col=2)
-      par(mfrow=c(1,1))
-    }
-  }
-  values <- c(parameters = parameters,
-                 gradients = gradients)
-
-  par(mfrow=c(2,1))
-  plot(fg$parameters$A, psych::Procrustes(values$parameters$A, fg$parameters$A)$loadings, ylim=c(-3,3), xlim=c(-3,3)); abline(0,1,col=1)
-  plot(fg$Z, values$parameters$Z, ylim=c(-3,3), xlim=c(-3,3)); abline(0,1,col=2); abline(0,-1,col=2)
-  par(mfrow=c(1,1))
-
-  parameters <- initialize_parameters(fg, rescale=F)
-  gradients  <- initialize_gradients(parameters)
-  values <- list(parameters = parameters, gradients = gradients)
-
-  # continue with safe stuff
-  set.seed(213)
-  values2 <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=0, compute_gradients = compute_gradients)
-  set.seed(213)
-  values3 <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=1, compute_gradients = compute_gradients)
-  set.seed(213)
-  values4 <- update_parameters_new(fg$Y, fg$X, values$parameters$Z, values$parameters, fg$families, fg$Miss, alpha=1, beta=0)
-  all.equal(values4$A, values2$parameters$A)  # MAKE THIS EQUAL, WHATS CHANGED?
-
-
-  # values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=0)
-
-
-
-
-  # and now finish it!
-
-  for(i in 1:50){
-    A.old <- parameters$A
-    parameters <- update_parameters_new(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=.5/(i**.2), beta=0)
-    # parameters <- update_parameters_new_double_hess(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=.5/(i**.2), beta=0)
-    # parameters <- update_parameters_new_2(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=.5/sqrt(i), beta=0)
-    # parameters <- update_parameters_rescale(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=0.5/sqrt(i), beta=0)
-
-    # those next are bad but rescaled_biased is super stable
-    # parameters <- update_parameters_rescale_biased(fg$Y, fg$X, parameters$Z, parameters, fg$families, fg$Miss, alpha=1/sqrt(i), beta=0)
-
-    error <- norm(A.old-parameters$A, type="F")/(norm(A.old, type="F") + norm(parameters$A, type="F"))
-
-    if(i%%5 == 1){
-      Sys.sleep(.5)
-      par(mfrow=c(2,1))
-      plot(fg$parameters$A, psych::Procrustes(parameters$A, fg$parameters$A)$loadings, ylim=c(-5,5), xlim=c(-3,3)); abline(0,1,col=1)
-      plot(fg$Z, parameters$Z, ylim=c(-3,3), xlim=c(-3,3)); abline(0,1,col=2); abline(0,-1,col=2)
-      par(mfrow=c(1,1))
-    }
-    # resc <- rescale(parameters$Z, parameters$A)
-    # parameters$A <- resc$A
-    # parameters$Z <- resc$Z
-    # cat("\nChange:", compute_error(parameters$A, A.old))
-    # cat("\nError:", compute_error(parameters$A, fg$parameters$A))
-    print(compute_error(parameters$A, fg$parameters$A))
-  }
+  params_hist <- do.call(rbind, params_hist)
+  ts.plot(params_hist)
+  points(rep(nrow(params_hist), ncol(params_hist)), as.vector(moving_average$A),col=2)
   #
   # library(gllvm)
   # fit.gllvm <- gllvm(y=fg$Y, x=fg$X, formula=~0+x, num.lv=1, family="binomial", sd.errors=F)
   #
   library(gmf)
-
   fit.gmf <- gmf(fg$Y, X=fg$X, family=binomial(), p = q)
   # fit.gmf <- gmf(fg$Y, X=fg$X, family=poisson(), p = q)
 
   library(mirtjml)
 
   fit.mirtjml <- mirtjml_expr(fg$Y, K= q, tol = 1e-1)
-  compute_error(values$parameters$A, fg$parameters$A)
-  compute_error(fit.gmf$v, fg$parameters$A)
-  compute_error(fit.mirtjml$A_hat, fg$parameters$A)
+  compute_error(moving_average$A, fg$parameters$A, rotate=T)
+  compute_error(fit.gmf$v, fg$parameters$A, rotate=T)
+  compute_error(fit.mirtjml$A_hat, fg$parameters$A, rotate=T)
 
-  plot(fg$parameters$A, psych::Procrustes(values$parameters$A, fg$parameters$A)$loadings, ylim=c(-5,5), xlim=c(-3,3))
+  plot(fg$parameters$A, psych::Procrustes(moving_average$A, fg$parameters$A)$loadings, ylim=c(-5,5), xlim=c(-3,3))
   points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=2); abline(0,1,col=1)
   points(fg$parameters$A, psych::Procrustes(fit.mirtjml$A_hat, fg$parameters$A)$loadings, col=3); abline(0,1,col=1)
 
-  plot(fg$parameters$B, allpar$B)
+  plot(fg$parameters$B, moving_average$B)
+  points(fg$parameters$B, t(fit.gmf$beta), col=2)
   points(fg$parameters$B, fit.mirtjml$d_hat, col=3)
 
+  compute_error(fg$parameters$B, moving_average$B, rotate=F)
+  compute_error(fg$parameters$B, fit.mirtjml$d_hat, rotate=F)
 }
 
 
@@ -1051,11 +330,11 @@ if(0) {
 
   devtools::load_all()
   set.seed(1423)
-  poisson  <- 0
+  poisson  <- 20
   gaussian <- 0
-  binomial <- 100
+  binomial <- 0
   p <- poisson + gaussian + binomial
-  fg <- gen_fastgllvm(nobs=1000, p=p, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=1, intercept=F, miss.prob = 0)
+  fg <- gen_fastgllvm(nobs=100, p=p, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F, miss.prob = 0)
   zhat <- with(fg, compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, Miss=Miss))
   plot(fg$Z, zhat$Zstar)
 
