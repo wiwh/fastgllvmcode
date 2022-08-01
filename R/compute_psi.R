@@ -3,6 +3,7 @@ initialize_gradients <- function(parameters) {
 }
 compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   A_old <- parameters$A
+  Z_old <- parameters$Z
   # begin by rescaling
   resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
@@ -16,7 +17,7 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   # TODO: optimize the rescaling for B too...
   if(!is.null(parameters$B) && all(X[,1]==1)) {
     Z0 <- scale(Z0, scale=F)
-    B[,1] <- B[,1]  - as.vector(parameters$A %*% attr(Z0, "scaled:center"))
+    parameters$B[,1] <- parameters$B[,1]  - as.vector(parameters$A %*% attr(Z0, "scaled:center"))
   }
   resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
@@ -63,7 +64,7 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
   phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
 
-  Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
+  Z_update <- Z_old - psi_sam$Z # TODO: or take from the parameter update
 
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
@@ -128,35 +129,6 @@ compute_AB_update <- function (Y, Z, X, B, A, phi, families, Miss=NULL) {
   AB <- AB - compute_hessian_x_psi(psi_AB, psi_AB_hess)
 
   AB
-}
-
-#This returns a list of high-level updates for the parameter
-compute_psi_star <- function(Y, X, Z, parameters, families, Miss, compute_hessian, Z.maxit=100) {
-  # overhead computations
-  if(!is.null(parameters$B)){
-    XB <- X %*% t(parameters$B)
-  } else {
-    XB <- NULL
-  }
-  # Imputing step: compute Zstar
-  Z <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=Z, Miss=Miss, verbose=F, maxit=Z.maxit)$Zstar
-
-  linpar <- compute_linpar(Z, parameters$A, XB=XB)
-  linpar_bprime <- compute_linpar_bprime(linpar$linpar, families)
-  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-
-  ZX <- ZX_join(Z, X)
-  #compute psi_star_AB
-  psi_AB <- compute_psi_AB(Y, ZX, parameters$phi, linpar_bprime, Miss=Miss)
-  psi_phi <- rep(0, length(parameters$phi)) # TODO...
-
-  if(compute_hessian) {
-    psi_AB_hessian <- compute_psi_AB_hessian(ZX, parameters$phi, linpar_bprimeprime, Miss)
-  } else {
-    psi_AB_hessian <- NULL
-  }
-
-  list(psi_AB = psi_AB, psi_phi = psi_phi, psi_AB_hessian = psi_AB_hessian, linpar=linpar, Z=Z)
 }
 
 #This returns a list of high-level updates for the parameter

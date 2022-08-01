@@ -104,7 +104,7 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
       # now we converge
       values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=T,  compute_gradients = compute_gradients_function)
     }
-    for(k in seq_along(parameters)){
+    for(k in seq_along(values$parameters)){
       moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * values$parameters[[k]]
     }
     if(i%%5 == 1 || i == controls$maxit){
@@ -124,7 +124,7 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
 
   # Update the fastgllvm object
   fg$Z <- moving_average[["Z"]]
-  fg$parameters <- moving_average[c("A", "B", "phi")]
+  fg$parameters <- moving_average[c("A", "B", "phi", "covZ")]
   fg$fit <- list(
     crit = crit,
     controls = controls,
@@ -401,6 +401,7 @@ if(0) {
 
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)
+  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
   compute_error(fit.m$A_hat, fg$parameters$A, rotate = T)
 
   plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
@@ -408,11 +409,13 @@ if(0) {
   points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
   plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)
   points(fg$par$B, fit.m$d_hat, col=2)
-  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
   ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
   ts.plot(fit.fg$fit$hist$B[,1:p])
   ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
   plot(fit.fg$fit$learning_rate)
+
+  compute_error(fit.fg$parameters$B, fg$parameters$B)
+  compute_error(fit.m$d_hat, fg$parameters$B)
 
   # load a simulated dataset
   attach(data_sim)
@@ -420,7 +423,7 @@ if(0) {
   res <- mirtjml_expr(data_sim$response, data_sim$K, tol = 1e-1)
   fit.fg <- fastgllvm(data_sim$response, data_sim$K, family="binomial")
 
-  plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2)
+  plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2); abline(h=0, col=2)
   plot(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2)
   compute_error(fit.fg$parameters$A, data_sim$A, rotate = T)
   compute_error(res$A_hat, data_sim$A, rotate = T)
