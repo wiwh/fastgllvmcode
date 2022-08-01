@@ -2,7 +2,8 @@
 # TODO:  write these in c++!
 
 gen_norm <- function(linpar, phi, nobs, p){
-  t(matrix(rnorm(p*nobs), p, nobs)*phi) + linpar
+  if(any(phi < 0)) stop("Negative values for the variance parameters.")
+  t(matrix(rnorm(p*nobs), p, nobs)*sqrt(phi)) + linpar
 }
 
 gen_poisson <- function(linpar, nobs, p){

@@ -87,9 +87,17 @@ update <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, deb
     if(is.null(gradients_new[[par]])) next()
     parameters[[par]] <- parameters[[par]] - alpha * gradients_new[[par]]
   }
+  parameters <- check_update_parameters(parameters)
   list(parameters=parameters, gradients=gradients_new)
 }
 
+check_update_parameters <- function(parameters){
+  if (any(parameters$phi < 1e-4)) {
+    warning("Parameter phi too small or negative, set to 1e-4 instead.")
+    parameters$phi[parameters$phi < 1e-4] <- 1e-4
+  }
+  parameters
+}
 
 ZX_join <- function(Z, X) {
   if (is.null(X)) {
@@ -147,13 +155,15 @@ compute_psi_star_known_Z <- function(Y, X, Z, parameters, families, Miss, comput
   ZX <- ZX_join(Z, X)
   #compute psi_star_AB
   psi_AB <- compute_psi_AB(Y, ZX, parameters$phi, linpar_bprime, Miss=Miss)
-  psi_phi <- rep(0, length(parameters$phi)) # TODO...
+
+  psi_phi <- compute_psi_phi(Y, parameters$phi, linpar_bprime, families, Miss)
 
   if(compute_hessian) {
     psi_AB_hessian <- compute_psi_AB_hessian(ZX, parameters$phi, linpar_bprimeprime, Miss)
   } else {
     psi_AB_hessian <- NULL
   }
+
 
   list(psi_AB = psi_AB, psi_phi = psi_phi, psi_AB_hessian = psi_AB_hessian, linpar=linpar, Z=Z)
 }
@@ -204,8 +214,24 @@ compute_psi_AB_test <- function(Y, ZX, phi, linpar_bprime, Miss){
   diag(1/phi) %*% t(Y - linpar_bprime) %*% ZX
 }
 
-compute_psi_phi <- function () {
+compute_psi_phi <- function (Y, phi, linpar_bprime, families, Miss) {
+  psi_phi <- rep(0, length(phi))
+  # update gaussian
+  if(length(families$id$gaussian > 0)) {
+    id <- families$id$gaussian
+    if(is.null(Miss)) {
+      # psi_phi[id] <- (colMeans((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
+      psi_phi[id] <- (colMeans(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10  # this is rescaled appropriately..
+    } else {
+      Y[Miss[,id], id] <- 0
+      # psi_phi[id] <- (colSums((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
+      psi_phi[id] <- (colSums(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10 # this is rescaled appropriately
+      # rescale
+      psi_phi[id] <- psi_phi[id]/(colSums(!Miss[,id]))
+    }
+  }
 
+  psi_phi
 }
 
 
@@ -230,8 +256,8 @@ if(0) {
   devtools::load_all()
   set.seed(121234)
   poisson  <- 0
-  gaussian <- 0
-  binomial <- 100
+  gaussian <- 10
+  binomial <- 0
   q <- 2
   p <- poisson + gaussian + binomial
   fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)),k=1, intercept=T, miss.prob = 0, scale=1)
@@ -307,8 +333,8 @@ if(0) {
 
   devtools::load_all()
   set.seed(1423)
-  poisson  <- 100
-  gaussian <- 0
+  poisson  <- 0
+  gaussian <- 1000
   binomial <- 0
   p <- poisson + gaussian + binomial
   fg <- gen_fastgllvm(nobs=100, p=p, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F, miss.prob = 0)

@@ -387,21 +387,24 @@ generate_families <- function(family, p){
 # SOME TESTS
 if(0) {
   devtools::load_all()
-
-  family <- "binomial"
-  nobs <- 500
-  p <-  20
-  q <- 1
-
-  fg <- gen_fastgllvm(nobs = nobs, p = p, q = q, intercept = T, family=family)
+  set.seed(121234)
+  poisson  <- 0
+  gaussian <- 2000
+  binomial <- 2000
+  q <- 5
+  p <- poisson + gaussian + binomial
+  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(123)
+  fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
   fit.fg <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls=list(alpha=1))
+  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
 
-
+  ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
+  ts.plot(fit.fg$fit$hist$B[,1:min(100, p)])
+  ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
 
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)
-  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
   compute_error(fit.m$A_hat, fg$parameters$A, rotate = T)
 
   plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
@@ -423,8 +426,8 @@ if(0) {
   res <- mirtjml_expr(data_sim$response, data_sim$K, tol = 1e-1)
   fit.fg <- fastgllvm(data_sim$response, data_sim$K, family="binomial")
 
-  plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2); abline(h=0, col=2)
-  plot(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, xlim=c(0,1.5), ylim=c(-.5, 2.5)); abline(0,1,col=2)
+  plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.1, 2), pch=19); abline(h=0, col=2); abline(0,1,col=2)
+  points(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, pch=1)
   compute_error(fit.fg$parameters$A, data_sim$A, rotate = T)
   compute_error(res$A_hat, data_sim$A, rotate = T)
   plot(data_sim$d, fit.fg$parameters$B); abline(0,1,col=2)
