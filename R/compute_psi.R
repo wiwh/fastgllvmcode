@@ -312,11 +312,11 @@ compute_gradients_02 <- function(Y, X, parameters, families, Miss, debiase) {
   parameters$A <- resc$A
   parameters$Z <- resc$Z
 
-  update_A <- A_old - parameters$A
+  # update_A <- A_old - parameters$A
   # Compute zhat on sample
   Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
   # rescale
-  A_old <- parameters$A
+  # A_old <- parameters$A
   resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
   Z0 <- resc$Z
@@ -365,7 +365,7 @@ compute_gradients_02 <- function(Y, X, parameters, families, Miss, debiase) {
 
   Z_update <- parameters$Z - psi_sam$Z # TODO: or take from the parameter update
 
-  list(A = update_A+AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
+  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 compute_gradients_1 <- function(Y, X, parameters, families, Miss, debiase) {
   A_old <- parameters$A
