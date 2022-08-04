@@ -32,9 +32,9 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
     B = parameters$B,
     X = X,
     Z = NULL,
-    nobs = nrow(Y),
-    Miss = Miss
+    nobs = nrow(Y)
   )
+  # TODO: generate without miss ! or with miss?
   # Obtain Zh
   Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
   # update covZ
@@ -174,15 +174,10 @@ compute_hessian_x_psi <- function(AB_psi, AB_hessian) {
   do.call(rbind, prod)
 }
 
-# #not used
-# compute_psi_AB_j_hessian <- function(ZX,  phi_j, linpar_bprimeprime_j) {
-#   -(t(ZX) %*% (ZX*(linpar_bprimeprime_j)))/phi_j
-# }
-
 compute_psi_AB <- function(Y, ZX, phi, linpar_bprime, Miss){
   if (!is.null(Miss)) {
-    Y[Miss] <- 0
-
+    Y[Miss] <- 0 # this is correct... check the NA rmd file for examples
+    linpar_bprime[Miss] <- 0
   }
   (t(Y - linpar_bprime)/phi) %*% ZX
 }
@@ -190,19 +185,12 @@ compute_psi_AB <- function(Y, ZX, phi, linpar_bprime, Miss){
 
 compute_psi_AB_hessian <- function (ZX, phi, linpar_bprimeprime, Miss) {
   if (!is.null(Miss)) {
-    linpar_bprimeprime[Miss] <- 0
-    # compute a list of all hessians
-    sapply(1:length(phi), function(j) {
-      -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/phi[j]
-    }, simplify=F)
-
-  } else {
-    # compute a list of all hessians
-    sapply(1:length(phi), function(j) {
-      -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/phi[j]
-    }, simplify=F)
-
+    linpar_bprimeprime[Miss] <- 0 # do at the parent lvl... this trick is OK, check NA.RMd
   }
+  # compute a list of all hessians
+  sapply(1:length(phi), function(j) {
+    -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/phi[j]
+  }, simplify=F)
 }
 
 
@@ -223,14 +211,13 @@ compute_psi_phi <- function (Y, phi, linpar_bprime, families, Miss) {
       # psi_phi[id] <- (colMeans((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
       psi_phi[id] <- (colMeans(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10  # this is rescaled appropriately..
     } else {
-      Y[Miss[,id], id] <- 0
+      Y[,id][Miss[,id]] <- 0
       # psi_phi[id] <- (colSums((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
       psi_phi[id] <- (colSums(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10 # this is rescaled appropriately
       # rescale
       psi_phi[id] <- psi_phi[id]/(colSums(!Miss[,id]))
     }
   }
-
   psi_phi
 }
 

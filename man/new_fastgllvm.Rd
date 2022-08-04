@@ -12,7 +12,8 @@ new_fastgllvm(
   families,
   dimensions,
   linpar = NULL,
-  fit = list()
+  fit = list(),
+  Miss = NULL
 )
 }
 \arguments{

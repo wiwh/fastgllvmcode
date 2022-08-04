@@ -92,7 +92,7 @@ compute_zstar_hessian <- function(A, phi, linpar, families, Miss) {
   q <- ncol(A)
 
   if(!is.null(Miss)) {
-    # TODO: do this in parent!
+    # TODO: do this in parent! THIS IS WRONGEEEE
     linpar_bprimeprime[Miss] <- 0
   }
 
@@ -171,12 +171,11 @@ compute_zstar_starting_values <- function(Y, A, XB, families, Miss) {
 if(0) {
   devtools::load_all()
   set.seed(1231)
-  fg <- gen_fastgllvm(nobs=1000, p=1000, q=5, family=c(rep("poisson", 950), rep("gaussian", 20), rep("binomial",30)), k=0, intercept=F, miss.prob = 0.5)
+  fg <- gen_fastgllvm(nobs=1000, p=1000, q=5, family=c(rep("poisson", 0), rep("gaussian", 1000), rep("binomial",0)), k=10, intercept=F, miss.prob = 0.5)
 
-  parameters.init <- compute_parameters_initial_values(fg, target=fg$parameters$A)
-  zhat <- compute_zstar(fg$Y, parameters.init$A, parameters.init$phi, fg$X, parameters.init$B, fg$families, Miss=fg$Miss)
-  plot(fg$parameters$A, parameters.init$A)
-  points(fg$Z, zhat$Zstar, col=2); abline(0,1,col=3)
+  # parameters.init <- compute_parameters_initial_values(fg, target=fg$parameters$A)
+  zhat <- compute_zstar(fg$Y, fg$parameters$A, fg$parameters$phi, fg$X, fg$parameters$B, fg$families, Miss=fg$Miss)
+  plot(fg$Z, zhat$Zstar); abline(0, 1, col=2)
   # now we rescale.
 
   # zstart must be the same individual or vector

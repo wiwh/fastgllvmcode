@@ -4,7 +4,17 @@
 \alias{generate_y}
 \title{Generates responses from a gllvm, given all parameters and values}
 \usage{
-generate_y(linpar, phi, families)
+generate_y(
+  linpar,
+  phi,
+  families,
+  A = NULL,
+  B = NULL,
+  X = NULL,
+  Z = NULL,
+  nobs = NULL,
+  Miss = NULL
+)
 }
 \arguments{
 \item{A:}{loadings}
@@ -16,10 +26,6 @@ generate_y(linpar, phi, families)
 \item{Z:}{nobs x q matrix of latent variables}
 
 \item{X:}{nobs x k design matrix}
-
-\item{families:}{a named list with names, c("gaussian", "binomial", "poisson", "negbin"), of indices corresponding to the family of the responses.}
-
-\item{known_par:}{a named list with names, c("gaussian", "binomial", "poisson", "negbin"), of known parameters (used for the size "n" of binomial responses), appearing in the same order as the corresponding element in \code{families}}
 }
 \value{
 a list corresponding to the model

@@ -8,14 +8,16 @@ gen_fastgllvm(
   nobs = 100,
   p = 5,
   q = 1,
-  k = 0,
+  k = 1,
   family = "gaussian",
   A = NULL,
   B = NULL,
   phi = NULL,
   X = NULL,
   Z = NULL,
-  intercept = F
+  intercept = T,
+  scale = 1,
+  miss.prob = 0
 )
 }
 \arguments{

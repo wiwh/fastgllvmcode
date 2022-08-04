@@ -20,27 +20,27 @@ The linear predictor to compute Z, for instance, involves ignoring the NA
 
 ```{r}
 set.seed(2131)
-n <- 100
+n <- 10000
 p <- 20
 q <- 2
-Y <- matrix(rnorm(n*p), n, p)
-Y[runif(n*p)<.1] <- NA
-A <- matrix(rnorm(p*q), p, q)
+Y <- abs(matrix(rnorm(n*p), n, p))
+na <- matrix(runif(n*p), n, p) < .1
+A <- abs(matrix(rnorm(p*q), p, q))
 
-compute_linpar_i <- function(Y, A, i) {
-  noNa <- !is.na(Y[i,])
-  t(A[noNa,]) %*% Y[i,noNa]
+compute_linpar_i <- function(Y, A, na, i) {
+  t(A[!na[i,],]) %*% Y[i,!na[i,]]
 }
 
-linpar1 <- t(sapply(1:n, function(i) compute_linpar_i(Y, A, i)))
+linpar1 <- t(sapply(1:n, function(i) compute_linpar_i(Y, A, na, i)))
 
 Yna <- Y
-Yna[is.na(Yna)] <- 0
+Yna[na] <- 0
 linpar2  <- Yna %*% A
 
 all.equal(linpar1, linpar2)
 
 ```
+
 
 Another type of multiplication:
 
@@ -58,6 +58,51 @@ a1 <- t(A) %*% (A*phina)# I have this
 a2 <- t(A[!missing,]) %*% diag(phi[!missing]) %*% A[!missing,]
 
 all.equal(a1,a2)
+
+```
+
+Linear model:
+
+
+```{r}
+set.seed(2131)
+n <- 1000
+p <- 20
+q <- 2
+na <- matrix(runif(n*q), n, q) < .1
+X <- matrix(rnorm(n*p), n, p)
+beta <- matrix(rnorm(p*q), p, q)
+Y <- X %*% beta + matrix(rnorm(n*q), n, q)
+
+B1 <- solve(t(X) %*% X) %*% t(X) %*% Y
+X0 <- X
+X0[na] <- 0
+Y0 <- Y
+Y0[na] <- 0
+
+B2 <- solve(t(X) %*% X) %*% t(X0) %*% Y0
+
+B3 <- sapply(1:q, function(j){
+  as.vector(solve(t(X[!na[,j],]) %*% X[!na[,j],]) %*% t(X[!na[,j],]) %*% Y[!na[,j],j])
+})
+
+
+
+plot(B1, B3); abline(0,1,col=2)
+
+# now what about t(X) %*% Y, can I make it with 0 instead of looping?
+
+#this is the correct
+XY1 <- sapply(1:ncol(Y), function(j){
+  t(X[!na[,j],]) %*% Y[!na[,j], j]
+})
+
+# this is the simplified
+XY3 <- sapply(1:ncol(Y), function(j){
+  t(X) %*% Y0[, j]
+})
+
+all.equal(XY1, XY3)
 
 ```
 

@@ -4,7 +4,7 @@
 \alias{compute_linpar}
 \title{Computes the linear parameter}
 \usage{
-compute_linpar(Z, X, parameters)
+compute_linpar(Z, A, X, B = NULL, XB = NULL)
 }
 \description{
 Computes the linear parameter

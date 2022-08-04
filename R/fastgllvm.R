@@ -16,6 +16,11 @@
 #' `id` is a named list of integer vectors specifying the column numbers corresponding, whose names correspond to those of `objects`, and
 #' `vec` is a named list of string vectors whose elements are the names corresponding to the `objects`$family name. This can be useful to specify
 #' different link functions for the families.
+#'
+#' @example
+#' fg <- gen_fastgllvm()
+#' fg.fit <- fastgllvm(fg)
+
 fastgllvm <- function(Y,
                       q=1,
                       family="gaussian",
@@ -69,6 +74,7 @@ fastgllvm <- function(Y,
 
   fg <- new_fastgllvm(Y, X, Z, parameters, families, dimensions)
   fastgllvm.fit(fg, controls, verbose, hist)
+
 }
 
 
@@ -187,7 +193,14 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, linpar=NULL
     stop("Family incorrectly specified: check the indices.")
   }
 
-  if(!is.null(Miss)) {
+  if (is.null(Miss)) {
+    Miss <- is.na(Y)
+    if (!any(Miss)) {
+      Miss <- NULL
+    }
+  }
+
+  if (!is.null(Miss)) {
     if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
     if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
   }
@@ -347,9 +360,6 @@ generate_families <- function(family, p){
     id = list(),
     vec = vector(length=p)
   )
-
-
-
   if (!is.list(family)) {
     if(!is.vector(family)) stop("Supplied 'family' must be either a list or a vector.")
     if(length(family) > 1) {
@@ -386,22 +396,22 @@ generate_families <- function(family, p){
 
 # SOME TESTS
 if(0) {
-  devtools::load_all()
-  set.seed(121234)
-  poisson  <- 0
-  gaussian <- 2000
-  binomial <- 2000
-  q <- 5
-  p <- poisson + gaussian + binomial
-  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(123)
-  fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
-  fit.fg <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls=list(alpha=1))
-  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
+    devtools::load_all()
+    set.seed(121234)
+    poisson  <- 0
+    gaussian <- 0
+    binomial <- 500
+    q <- 10
+    p <- poisson + gaussian + binomial
+    family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
+    set.seed(123)
+    fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0.3, scale=1)
+    fit.fg <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = 1, hist=T, controls = list(alpha=1, eps=1e-4))
+    compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
 
-  ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
-  ts.plot(fit.fg$fit$hist$B[,1:min(100, p)])
-  ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
+    ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
+    ts.plot(fit.fg$fit$hist$B[,1:min(100, p)])
+    ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
 
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)
@@ -412,6 +422,7 @@ if(0) {
   points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
   plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)
   points(fg$par$B, fit.m$d_hat, col=2)
+
   ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
   ts.plot(fit.fg$fit$hist$B[,1:p])
   ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
@@ -424,7 +435,7 @@ if(0) {
   attach(data_sim)
   # run the exploratory analysis
   res <- mirtjml_expr(data_sim$response, data_sim$K, tol = 1e-1)
-  fit.fg <- fastgllvm(data_sim$response, data_sim$K, family="binomial")
+  fit.fg <- fastgllvm(data_sim$response, data_sim$K, family="binomial", controls=list(eps=1e-4))
 
   plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.1, 2), pch=19); abline(h=0, col=2); abline(0,1,col=2)
   points(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, pch=1)
