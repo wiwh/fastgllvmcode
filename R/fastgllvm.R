@@ -400,11 +400,11 @@ if(0) {
     set.seed(121234)
     poisson  <- 0
     gaussian <- 0
-    binomial <- 500
-    q <- 10
+    binomial <- 50
+    q <- 2
     p <- poisson + gaussian + binomial
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-    set.seed(123)
+    set.seed(1203)
     fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0.3, scale=1)
     fit.fg <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = 1, hist=T, controls = list(alpha=1, eps=1e-4))
     compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
@@ -447,7 +447,6 @@ if(0) {
   compute_error(matrix(res$d_hat), matrix(data_sim$d))
 }
 if(0){
-
   fastgllvm.fit <- function(Y, X, A.init=NULL, B.init=NULL, phi.init=NULL, Z.init=NULL, H=1, maxit=250 , tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
     if(is.null(learning_rate)) learning_rate <- ifelse(method=="SA", "exp", "constant")
     if(is.character(learning_rate)){

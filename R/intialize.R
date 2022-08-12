@@ -125,9 +125,9 @@ compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=T)
     cat(" Initializing A and phi...")
     # Initialize A and phi
     fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=10) # TODO: there must be some Z here as well...
-    A <- fit.ffa$loadings * (1+colMeans(NAs))  # TODO: make ffa work with NAs, but this trick is ok for initialization
+    A <- fit.ffa$A * (1+colMeans(NAs))  # TODO: make ffa work with NAs, but this trick is ok for initialization
     phi <- rep(1, dimensions$p)
-    phi[families$id$gaussian] <- fit.ffa$communalites[families$id$gaussian]
+    phi[families$id$gaussian] <- fit.ffa$Psi[families$id$gaussian]
 
 
     # go to target
