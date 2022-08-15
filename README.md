@@ -4,7 +4,7 @@
 
 <!-- badges: start -->
 <!-- badges: end -->
-Estimate fastgllvmcode.
+Estimate GLLVMs.
 
 
 ## Installation
