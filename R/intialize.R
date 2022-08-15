@@ -85,8 +85,6 @@ initialize_learning_rate <- function(method="constant", maxit, learning_rate.arg
 
 
 
-library(fastfactoranalysis)
-
 #' Given a fastgllvm object, compute good intial values.
 #' @param fastgllvm: an object of class ''fastgllvm''
 #' @param target: if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target

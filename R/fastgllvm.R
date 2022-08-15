@@ -17,9 +17,23 @@
 #' `vec` is a named list of string vectors whose elements are the names corresponding to the `objects`$family name. This can be useful to specify
 #' different link functions for the families.
 #'
-#' @example
-#' fg <- gen_fastgllvm()
-#' fg.fit <- fastgllvm(fg)
+#' @examples
+#' # Setting: declare the types of the response (in the order in which they appear)
+#' family=c(rep("poisson", 50), rep("gaussian", 50), rep("binomial", 50))
+#' q <- 2
+#' p <- length(family)
+#' set.seed(1234)
+#' # Simulate data
+#' data <- gen_fastgllvm(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
+#' # Fit the data
+#' fit <- fastgllvm(data$Y, q = q, X=data$X, family=family,  intercept = 1, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+#' # Evaluate the fit
+#' plot(fit)
+#' If necessary, update the fit.
+#' fit <- update(fit)
+#' # Evaluate the fit
+#' plot(fit)
+#' @export
 
 fastgllvm <- function(Y,
                       q=1,
@@ -30,7 +44,7 @@ fastgllvm <- function(Y,
                       parameters.init=NULL,
                       controls=list(),
                       verbose = F,
-                      hist = F) {
+                      hist = T) {
 
   stopifnot(is.matrix(Y))
 
@@ -62,12 +76,15 @@ fastgllvm <- function(Y,
     Z <- matrix(0, dimensions$p, dimensions$q)
   }
 
+  # TODO: this is useless at this stage...
   if (!is.null(parameters.init)) {
     if(!is.list(parameters.init)) stop("The supplied 'parameters.init' must be a list.")
-    if (any(!(names(parameters.init) %in% c("A", "B", "phi")))) stop("Unrecognized name of parameter in supplied 'parameters.init'.")
+    if (any(!(names(parameters.init) %in% c("A", "B", "phi", "covZ")))) stop("Unrecognized name of parameter in supplied 'parameters.init'.")
+    parameters <- parameters.init
+  } else {
+    parameters <- initialize_parameters(parameters.init$A, parameters.init$B, parameters.init$phi, dimensions$p, dimensions$q, dimensions$k)
   }
 
-  parameters <- initialize_parameters(parameters.init$A, parameters.init$B, parameters.init$phi, dimensions$p, dimensions$q, dimensions$k)
 
   stopifnot(is.list(controls))
   controls <- initialize_controls(controls)
@@ -79,10 +96,9 @@ fastgllvm <- function(Y,
 
 
 #' Workhorse function to fit a fastgllvm model
-#' @fg: an object of type "fastgllvm"
-#' @controls: a list of parameters controlling the fitting process
+#' @param fg: an object of type "fastgllvm"
+#' @param controls: a list of parameters controlling the fitting process
 fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
-
   #TODO: problem with missing value when q=1
   values <- list()
   if (!is.null(parameters.init)) {
@@ -105,10 +121,10 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
     moving_average_old <- moving_average
     if (i < 10) {
       # safe start
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=ifelse(controls$safe.start, F, T), compute_gradients = compute_gradients_function)
+      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=ifelse(controls$safe.start, F, T), compute_gradients = compute_gradients_function)
     } else {
       # now we converge
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=T,  compute_gradients = compute_gradients_function)
+      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=T,  compute_gradients = compute_gradients_function)
     }
     for(k in seq_along(values$parameters)){
       moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * values$parameters[[k]]
@@ -382,10 +398,10 @@ generate_families <- function(family, p){
     }
   } else {
     # TODO: test that the user entered the family correctly
-    families$id <- family
-    families$objects <- lapply(names(families$id), function(family_name)
-      get(family_name, mode = "function", envir = parent.frame())())
-    names(families$objects) <- names(families$id)
+    # families$id <- family
+    # families$objects <- lapply(names(families$id), function(family_name)
+    #   get(family_name, mode = "function", envir = parent.frame())())
+    # names(families$objects) <- names(families$id)
   }
 
   for (i in seq_along(families$id)) {
@@ -398,20 +414,19 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(121234)
-    poisson  <- 0
-    gaussian <- 0
+    poisson  <- 50
+    gaussian <- 50
     binomial <- 50
     q <- 2
     p <- poisson + gaussian + binomial
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(1203)
-    fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0.3, scale=1)
-    fit.fg <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = 1, hist=T, controls = list(alpha=1, eps=1e-4))
-    compute_error(fit.fg$parameters$A, fg$parameters$A, rotate = T)
+    fg <- gen_fastgllvm(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0, scale=1)
+    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = 1, hist=T, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+    plot(fit)
+    fit <- update(fit)
+    plot(fit)
 
-    ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
-    ts.plot(fit.fg$fit$hist$B[,1:min(100, p)])
-    ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
 
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)

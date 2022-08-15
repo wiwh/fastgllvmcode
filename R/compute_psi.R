@@ -69,7 +69,7 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 
-update <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, debiase=T, compute_gradients=NULL) {
+update_parameters <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, debiase=T, compute_gradients=NULL) {
   if(is.null(compute_gradients)) stop("Provide a gradient function")
   # compute gradients
   gradients_new <- compute_gradients(Y, X, parameters, families, Miss, debiase=debiase)
@@ -209,11 +209,11 @@ compute_psi_phi <- function (Y, phi, linpar_bprime, families, Miss) {
     id <- families$id$gaussian
     if(is.null(Miss)) {
       # psi_phi[id] <- (colMeans((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
-      psi_phi[id] <- (colMeans(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10  # this is rescaled appropriately..
+      psi_phi[id] <- (colMeans(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 5  # this is rescaled appropriately..
     } else {
       Y[,id][Miss[,id]] <- 0
       # psi_phi[id] <- (colSums((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
-      psi_phi[id] <- (colSums(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 10 # this is rescaled appropriately
+      psi_phi[id] <- (colSums(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 5 # this is rescaled appropriately
       # rescale
       psi_phi[id] <- psi_phi[id]/(colSums(!Miss[,id]))
     }
@@ -261,9 +261,9 @@ if(0) {
     moving_average_old <- moving_average
     if(i==10) print("Changing to debiase now!")
     if(i < 10) {
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=0, debiase=T, compute_gradients = compute_gradients_function)
+      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=1, beta=0, debiase=T, compute_gradients = compute_gradients_function)
     } else {
-      values <- update(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=2/(2+i**.8), beta=0.2, debiase=T,  compute_gradients = compute_gradients_function)
+      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, alpha=2/(2+i**.8), beta=0.2, debiase=T,  compute_gradients = compute_gradients_function)
     }
 
     for(k in seq_along(parameters)){

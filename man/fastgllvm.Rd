@@ -14,7 +14,7 @@ fastgllvm(
   parameters.init = NULL,
   controls = list(),
   verbose = F,
-  hist = F
+  hist = T
 )
 }
 \arguments{
@@ -42,4 +42,21 @@ The \code{family} argument can be one of the following:
 \code{vec} is a named list of string vectors whose elements are the names corresponding to the \code{objects}$family name. This can be useful to specify
 different link functions for the families.
 }
+}
+\examples{
+# Setting: declare the types of the response (in the order in which they appear)
+family=c(rep("poisson", 50), rep("gaussian", 50), rep("binomial", 50))
+q <- 2
+p <- length(family)
+set.seed(1234)
+# Simulate data
+data <- gen_fastgllvm(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
+# Fit the data
+fit <- fastgllvm(data$Y, q = q, X=data$X, family=family,  intercept = 1, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+# Evaluate the fit
+plot(fit)
+If necessary, update the fit.
+fit <- update(fit)
+# Evaluate the fit
+plot(fit)
 }

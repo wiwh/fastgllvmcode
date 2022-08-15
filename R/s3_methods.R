@@ -20,8 +20,37 @@ plot.fastgllvm <- function(f){
   if(length(f$fit) == 0) {
     stop("Fit the model before attempting to plot.")
   }
+  ts.plot(f$fit$hist$A[,1:min(100, f$dimensions$p*f$dimensions$q)], main="Convergence plot: loadings.", xlab="Iteration")
+  par(ask=TRUE)
+  ts.plot(f$fit$hist$B[,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration")
+  ts.plot(f$fit$hist$phi[,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration")
+  par(ask=FALSE)
 }
 
+#' Update the fit with another round of stochastic approximation
+#' @export
+update.fastgllvm <- function(f, ...){
+  if(length(f$fit) == 0) {
+    stop("Fit the model before attempting to update it.")
+  }
+
+  arguments <- list(...)
+
+  if (is.null(arguments[["controls"]])) {
+    controls <- f$fit$controls
+    controls$alpha <- controls$alpha/2
+  }
+
+  if (is.null(arguments[["verbose"]])) {
+    verbose <- F
+  }
+
+  if (is.null(arguments[["hist"]])) {
+    hist <- T
+  }
+  parameters <- list(A=f$parameters$A, B=f$parameters$B, phi=f$parameters$phi, Z=f$Z, covZ=f$parameters$covZ)
+  fastgllvm.fit(f, parameters.init = parameters, controls=controls, verbose=verbose, hist=hist)
+}
 
 simulate_fastgllvm <- function(fastgllvm, n=NULL){
   nsim <- ifelse(is.null(n), fit$n, n)
@@ -36,29 +65,10 @@ simulate_fastgllvm <- function(fastgllvm, n=NULL){
   })
 }
 
-plot_fastgllvm <- function(fastgllvm){
-  par(mfrow=c(4,1))
-  A.dim <- dim(fastgllvm$hist$A)
-  t.seq <- seq(1, A.dim[1], l=min(1000, A.dim[1]))
-
-  sample <- sample(1:A.dim[2], min(250, A.dim[2]))
-  ts.plot(fastgllvm$hist$A[t.seq, sample])
-
-  B.dim <- dim(fastgllvm$hist$B)
-  sample <- sample(1:B.dim[2], min(250, B.dim[2]))
-  ts.plot(fastgllvm$hist$B[t.seq, sample])
-
-  phi.dim <- dim(fastgllvm$hist$phi)
-  sample <- sample(1:phi.dim[2], min(250, phi.dim[2]))
-  ts.plot(fastgllvm$hist$phi[t.seq, sample])
-
-  ts.plot(fastgllvm$hist$crit[t.seq])
-  par(mfrow=c(1,1))
-}
 
 #' Print a fastgllvm object
 #'
 #' @export
 print.fastgllvm <- function(fastgllvm){
-  cat("test")
+  cat("The 'print' method for a 'fastgllvm' object has not been implemented yet.")
 }

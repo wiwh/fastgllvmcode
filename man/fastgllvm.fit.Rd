@@ -6,6 +6,11 @@
 \usage{
 fastgllvm.fit(fg, controls, verbose, hist, parameters.init = NULL)
 }
+\arguments{
+\item{fg:}{an object of type "fastgllvm"}
+
+\item{controls:}{a list of parameters controlling the fitting process}
+}
 \description{
 Workhorse function to fit a fastgllvm model
 }
