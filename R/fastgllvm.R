@@ -43,6 +43,7 @@ fastgllvm <- function(Y,
                       Z.init = NULL,
                       parameters.init=NULL,
                       controls=list(),
+                      method="full",
                       verbose = F,
                       hist = T) {
 
@@ -64,99 +65,99 @@ fastgllvm <- function(Y,
   }
 
   dimensions <- list(
+    n = nrow(Y),
     p = ncol(Y),
     q = q,
     k = k
   )
 
-  if (!is.null(Z.init)) {
-    stopifnot(is.matrix(Z.init))
-    Z <- Z.init
-  } else {
-    Z <- matrix(0, dimensions$p, dimensions$q)
-  }
-
-  # TODO: this is useless at this stage...
-  if (!is.null(parameters.init)) {
-    if(!is.list(parameters.init)) stop("The supplied 'parameters.init' must be a list.")
-    if (any(!(names(parameters.init) %in% c("A", "B", "phi", "covZ")))) stop("Unrecognized name of parameter in supplied 'parameters.init'.")
-    parameters <- parameters.init
-  } else {
-    parameters <- initialize_parameters(parameters.init$A, parameters.init$B, parameters.init$phi, dimensions$p, dimensions$q, dimensions$k)
-  }
-
-
-  stopifnot(is.list(controls))
+  parameters <- initialize_parameters(parameters.init, dimensions, method=method)
+  # # TODO: this is useless at this stage...
+  # if (!is.null(parameters.init)) {
+  #   if(!is.list(parameters.init)) stop("The supplied 'parameters.init' must be a list.")
+  #   if (any(!(names(parameters.init) %in% c("A", "B", "phi", "covZ")))) stop("Unrecognized name of parameter in supplied 'parameters.init'.")
+  #   parameters <- parameters.init
+  # } else {
+  #   parameters <- initialize_parameters(parameters.init$A, parameters.init$B, parameters.init$phi, dimensions$p, dimensions$q, dimensions$k)
+  # }
   controls <- initialize_controls(controls)
 
-  fg <- new_fastgllvm(Y, X, Z, parameters, families, dimensions)
+  fg <- new_fastgllvm(Y, X, parameters, families, dimensions)
+  fg$method <- method
+  fg$intercept <- intercept
   fastgllvm.fit(fg, controls, verbose, hist)
 
 }
 
 
-#' Workhorse function to fit a fastgllvm model
-#' @param fg: an object of type "fastgllvm"
-#' @param controls: a list of parameters controlling the fitting process
 fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
-  #TODO: problem with missing value when q=1
-  values <- list()
+  # we store gradients and parameters in a list
   if (!is.null(parameters.init)) {
-    values$parameters <- parameters.init
+    parameters <- parameters.init
   } else {
-    values$parameters <- compute_parameters_initial_values(fg, rescale=F)
+    parameters <- compute_parameters_initial_values(fg, rescale=F)
   }
-  values$gradients = initialize_gradients(values$parameters)
+
+  gradients <-  initialize_gradients(parameters, method=fg$method)
 
   # One may define other functions to compute gradients
-  compute_gradients_function <- compute_gradients
+  if(fg$method == "full") compute_gradients <- compute_gradients_full
+  if(fg$method == "simple") compute_gradients <- compute_gradients_simple
+
 
   params_hist <- list()
-  moving_average <- values$parameters
+  moving_average <- parameters
   crit <- Inf
 
-  learning_rate <- initialize_learning_rate(method="spall", maxit=controls$maxit, learning_rate.args = list(rate=3, end=.01))
+  if(is.null(controls$learning_rate.args)) controls$learning_rate.args <- list(method="spall", rate=2, end=.1)
+  if(is.null(controls$learning_rate.args$method)) controls$learning_rate.args$method <- "spall"
+  if(is.null(controls[["learning_rate"]])) controls$learning_rate <- initialize_learning_rate(maxit=controls$maxit, learning_rate.args = controls$learning_rate.args)
 
   for(i in 1:controls$maxit){
     moving_average_old <- moving_average
-    if (i < 10) {
-      # safe start
-      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=ifelse(controls$safe.start, F, T), compute_gradients = compute_gradients_function)
-    } else {
-      # now we converge
-      values <- update_parameters(fg$Y, fg$X, values$parameters, values$gradients, fg$families, fg$Miss, controls$alpha * learning_rate(i), controls$beta, debiase=T,  compute_gradients = compute_gradients_function)
+    gradients_old <- gradients
+    # get the gradient
+    gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
+
+    # exponential smoothing step
+    for (par in names(parameters)) {
+      gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
     }
-    for(k in seq_along(values$parameters)){
-      moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * values$parameters[[k]]
+    # update step
+    for (par in names(parameters)) {
+      parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * gradients[[par]]
     }
-    if(i%%5 == 1 || i == controls$maxit){
+    parameters <- check_update_parameters(parameters)
+
+    # We track a moving average of the last 1/controls$ma iterates
+    for(k in seq_along(parameters)){
+      moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * parameters[[k]]
+    }
+
+    if(i == 1 || i%%5 == 0 || i == controls$maxit){
       crit <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
       cat("\n Iteration: ", i, " - crit: ", crit)
     }
-    if(hist) params_hist <- c(params_hist, list(values$parameters))
+    if(hist) params_hist <- c(params_hist, list(parameters))
     if(i >= controls$minit && crit < controls$eps) break()
   }
+
   if(hist){
-    history <- list()
-    history$A <- do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i$A)))
-    history$B <- do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i$B)))
-    history$phi <- do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i$phi)))
-    history$Z.cov <- do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i$covZ)))
+    history <- sapply(names(parameters), function(par_name) {
+      do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
+    }, simplify=F)
   }
 
   # Update the fastgllvm object
-  fg$Z <- moving_average[["Z"]]
-  fg$parameters <- moving_average[c("A", "B", "phi", "covZ")]
+  fg$parameters <- moving_average
   fg$fit <- list(
     crit = crit,
     controls = controls,
-    hist = if(hist) history else NULL,
-    learning_rate = learning_rate(1:i)
+    hist = if(hist) history else NULL
   )
   fg$converged <- ifelse(crit < controls$eps, T, F)
   fg
 }
-
 
 # Constructor
 # -----------
@@ -169,7 +170,7 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
 #' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
 #'
 #' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, linpar=NULL, fit=list(), Miss=NULL) {
+new_fastgllvm <- function(Y, X, parameters, families, dimensions, linpar=NULL, fit=list(), Miss=NULL) {
   stopifnot(is.matrix(Y))
   if(!is.null(parameters$B)) {
     stopifnot(is.matrix(parameters$B))
@@ -177,9 +178,6 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, linpar=NULL
     if(ncol(X) != ncol(parameters$B)) stop("Dimension mismatch between X and B.")
   }
 
-  if (is.null(Z)) {
-    Z <- matrix(0, nrow(Y), dimensons$q)
-  }
 
   if (is.null(parameters)) {
     parameters <- list()
@@ -224,7 +222,6 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, linpar=NULL
   fastgllvm <- structure(
     list(Y=Y,
          X=X,
-         Z=Z,
          parameters=parameters,
          families=families,
          dimensions=dimensions,
@@ -239,6 +236,7 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, linpar=NULL
 # TODO: families$id must total n!!!
 validate_fastgllvm <- function(fastgllvm){
 
+  # TODO: check that iff intercept is true, then X[,1] is full of ones.
   # TODO: check that controls have the required stuff... or do that at control
   # TODO: test that the Miss matrix has no row with all ones...
   with(fastgllvm, {
@@ -283,27 +281,35 @@ gen_fastgllvm <- function(nobs=100,
     parameters$A <- parameters$A * scale
     parameters$B <- parameters$B * scale
   }
-  dimensions <- generate_dimensions(parameters)
 
+  dimensions <- list(n=nobs,
+                     p=nrow(parameters$A),
+                     q=ncol(parameters$A),
+                     k=if(is.null(parameters$B)) 0 else ncol(parameters$B))
 
   # Generate unspecified variates
-  if (is.null(Z)) Z <- gen_Z(nobs, q)
+  if (is.null(Z)) {
+    parameters$Z <- gen_Z(nobs, q)
+  } else {
+    parameters$Z <- Z
+  }
+
   if (is.null(X)) {
-    if (k==0) {
+    if (dimensions$k==0) {
       X <- matrix(NA, nobs, 0)
     } else {
-      X <- gen_X(nobs, dimensions$k, intercept)
+      X <- gen_X(dimensions$n, dimensions$k, intercept)
     }
   } else {
     if (intercept && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
   }
-  if (intercept && k==0) warning("Intercept could not be added because k is set to 0. Set k>=1 if intercept=True.")
+  if (intercept && dimensions$k==0) warning("Intercept could not be added because k is set to 0. Set k>=1 if intercept=True.")
 
   # Construct families
   families <- generate_families(family, dimensions$p)
 
   # Generate data
-  linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
+  linpar <- compute_linpar(parameters$Z, parameters$A, X, parameters$B)
   Y <- generate_y(linpar, parameters$phi, families)$Y
 
   if (miss.prob != 0) {
@@ -316,13 +322,14 @@ gen_fastgllvm <- function(nobs=100,
   fastgllvm <- new_fastgllvm(
     Y=Y,
     X=X,
-    Z=Z,
     parameters=parameters,
     families=families,
     dimensions=dimensions,
     linpar=linpar,
     Miss = Miss
   )
+
+  fastgllvm$intercept <- intercept
 
   validate_fastgllvm(fastgllvm)
   fastgllvm
@@ -357,17 +364,11 @@ generate_parameters <- function(A, B, phi, p, q, k){
     stopifnot(length(phi) == p)
   }
   list(A=A, B=B, phi=phi)
+
+
 }
 
-generate_dimensions <- function(parameters){
-  if (is.null(parameters$B)) {
-    k <- 0
-  } else {
-    k <- ncol(parameters$B)
-  }
 
-  list(p=nrow(parameters$A), q=ncol(parameters$A), k=k)
-}
 
 #' Generate the families list as used in the other functions
 generate_families <- function(family, p){
@@ -413,19 +414,52 @@ generate_families <- function(family, p){
 # SOME TESTS
 if(0) {
     devtools::load_all()
-    set.seed(121234)
-    poisson  <- 50
-    gaussian <- 50
-    binomial <- 50
-    q <- 2
+    set.seed(1234)
+    poisson  <- 0
+    gaussian <- 9
+    binomial <- 0
+    q <- 3
     p <- poisson + gaussian + binomial
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-    set.seed(1203)
-    fg <- gen_fastgllvm(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0, scale=1)
-    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = 1, hist=T, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+    set.seed(120303)
+    fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
+    # check initialization
+    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=500, maxit=500,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="constant")))
     plot(fit)
-    fit <- update(fit)
+    for(i in 1:5){
+      fit <- update(fit)
+    }
     plot(fit)
+
+    fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
+
+    compute_cov <- function(A, Psi){
+      cov <- A %*% t(A) + diag(Psi)
+      cov <- diag(diag(cov)**-.5) %*% cov %*% diag(diag(cov)**-.5)
+      cov
+    }
+
+    plot(cor(fg$Y), compute_cov(fit.ffa$A, fit.ffa$Psi))
+    points(cor(fg$Y), compute_cov(fit$parameters$A, fit$parameters$phi), col=2)
+
+    fa <- factanal(fg$Y, q)
+    cov1 <- fit$parameters$A %*% t(fit$parameters$A) + diag(fit$parameters$phi)
+    cov1 <- diag(diag(cov1)**-0.5)%*% cov1 %*%diag(diag(cov1)**-0.5)
+    cov2 <- fa$loadings %*% t(fa$loadings) + diag(fa$uniquenesses)
+    plot(cor(fg$Y), cov1)
+    points(cor(fg$Y), cov2, col=2)
+    plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
+    points(fg$parameters$A, psych::Procrustes(fa$loadings, fg$parameters$A)$loadings, col=2);abline(0,1,col=2)
+
+    fit.ltm <- ltm(fg$Y ~z1+z2)
+    plot(fg$parameters$A, fit.ltm$coefficients[,1], xlim=c(-3,3), ylim=c(-3,3))
+    points(fg$parameters$A, fit$parameters$A, col=2)
+    abline(0,1,col=2)
+    abline(0,-1,col=2)
+
+    compute_error(fit.ltm$coefficients[,1], fg$parameters$A, rotate=T)
+    compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
+
 
 
   library(mirtjml)

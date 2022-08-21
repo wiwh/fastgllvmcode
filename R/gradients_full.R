@@ -1,11 +1,30 @@
-initialize_gradients <- function(parameters) {
+initialize_parameters_full <- function(parameters, dimensions) {
+  with(dimensions, {
+    if (is.null(parameters$A)) parameters$A <- matrix(0, p, q)
+    if (is.null(parameters$B)) parameters$B <- matrix(0, p, k)
+    if (is.null(parameters$phi)) parameters$phi <- rep(1, p)
+    if (is.null(parameters$Z)) parameters$Z <- matrix(0, n, q)
+    if (is.null(parameters$covZ)) parameters$covZ <- diag(q)
+
+    # Control parameters
+    stopifnot(is.matrix(parameters$A) && dim(parameters$A) == c(p, q))
+    stopifnot(is.matrix(parameters$B) && dim(parameters$B) == c(p, k))
+    stopifnot(is.vector(parameters$phi) && length(parameters$phi) == p)
+    stopifnot(is.matrix(parameters$Z) && dim(parameters$Z) == c(n, q))
+    stopifnot(is.matrix(parameters$covZ) && dim(parameters$covZ) == c(q,q))
+    parameters
+  })
+}
+
+initialize_gradients_full <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
-compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
+
+compute_gradients_full <- function(Y, X, parameters, families, Miss, debiase) {
   A_old <- parameters$A
   Z_old <- parameters$Z
   # begin by rescaling
-  resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
+  resc <- rescale.old(parameters$Z, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
   parameters$Z <- resc$Z
 
@@ -19,7 +38,7 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
     Z0 <- scale(Z0, scale=F)
     parameters$B[,1] <- parameters$B[,1]  - as.vector(parameters$A %*% attr(Z0, "scaled:center"))
   }
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
+  resc <- rescale.old(Z0, parameters$A, target.cov=parameters$covZ)
   parameters$A <- resc$A
   Z0 <- resc$Z
 
@@ -35,6 +54,86 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
     nobs = nrow(Y)
   )
   # TODO: generate without miss ! or with miss?
+  # Obtain Zh
+  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
+  # update covZ
+  # covZ <- .9*parameters$covZ + .1 * cov(Zh)
+  covZ <- cov(Zh)
+  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
+
+
+  # rescale.old Zh
+  resc <- rescale.old(Zh, target.cov = parameters$covZ)
+  Zh <- resc$Z
+
+  # compute psi on this
+  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
+  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
+
+
+  # update
+  if(debiase) {
+    # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
+    AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
+    AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
+    AB_update <- AB_update_sam - AB_update_sim
+  } else {
+    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
+  }
+  AB_update <- AB_separate(AB_update, ncol(parameters$A))
+  phi_update <- (psi_sim$psi_phi - psi_sam$psi_phi)
+
+  Z_update <- Z_old - psi_sam$Z # TODO: or take from the parameter update
+
+  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
+}
+
+compute_gradients_full.new <- function(Y, X, parameters, families, Miss, debiase) {
+  A_old <- parameters$A
+  Z_old <- parameters$Z
+  # begin by rescaling
+  if(!is.null(parameters$B) && !any(X[,1]!=1)) {
+    intercept <- T # TODO: this is inefficient here...
+  } else {
+    intercept <-
+      F
+  }
+  parameters <- rescale(parameters, rescale.AB=T, target.cov=parameters$covZ, intercept = intercept)
+  # browser()
+  # parameters$Z <-t(t(parameters$Z) + runif(5))
+  # resc.old <- rescale.old(parameters$Z, parameters$A, target.cov=parameters$covZ)
+  # resc.new <- rescale(parameters, rescale.AB=T, target.cov=parameters$covZ, intercept=intercept)
+  # all.equal(resc.old$Z, resc.new$Z)
+  # all.equal(resc.old$A, resc.new$A)
+  # lp1 <- with(parameters, compute_linpar(Z, A, X, B))
+  # lp2 <- with(resc.new, compute_linpar(Z, A, X, B))
+  # all.equal(lp1, lp2)
+
+  # parameters$A <- resc$A
+  # parameters$Z <- resc$Z
+
+
+  # update_A <- A_old - parameters$A
+  # Compute zhat on sample
+  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
+  # rescale
+
+  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
+  parameters$A <- resc$A
+  Z0 <- resc$Z
+
+  # Generate sim
+  Y_sim <- generate_y(
+    linpar = NULL,
+    phi = parameters$phi,
+    families = families,
+    A = parameters$A,
+    B = parameters$B,
+    X = X,
+    Z = NULL,
+    nobs = nrow(Y)
+  )
+
   # Obtain Zh
   Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
   # update covZ
@@ -69,59 +168,6 @@ compute_gradients <- function(Y, X, parameters, families, Miss, debiase) {
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 
-update_parameters <- function(Y, X, parameters, gradients, families, Miss, alpha, beta, debiase=T, compute_gradients=NULL) {
-  if(is.null(compute_gradients)) stop("Provide a gradient function")
-  # compute gradients
-  gradients_new <- compute_gradients(Y, X, parameters, families, Miss, debiase=debiase)
-
-  # check that parameters and gradients are all equal
-  if(any(names(gradients_new) != names(parameters))) stop("Gradients and parameters are not the same") # TODO: remove this check once everything is done
-  if(any(names(gradients_new) != names(gradients))) stop("Gradients and gradients_new are not the same") # TODO: remove this check once everything is done
-  # exponential smoothing step
-  for (par in names(parameters)) {
-    if(is.null(gradients_new[[par]])) next()
-    gradients_new[[par]] <- beta * gradients[[par]] + (1-beta) * gradients_new[[par]]
-  }
-  # update step
-  for (par in names(parameters)) {
-    if(is.null(gradients_new[[par]])) next()
-    parameters[[par]] <- parameters[[par]] - alpha * gradients_new[[par]]
-  }
-  parameters <- check_update_parameters(parameters)
-  list(parameters=parameters, gradients=gradients_new)
-}
-
-check_update_parameters <- function(parameters){
-  if (any(parameters$phi < 1e-4)) {
-    warning("Parameter phi too small or negative, set to 1e-4 instead.")
-    parameters$phi[parameters$phi < 1e-4] <- 1e-4
-  }
-  parameters
-}
-
-ZX_join <- function(Z, X) {
-  if (is.null(X)) {
-    Z
-  } else {
-    cbind(Z,X)
-  }
-}
-
-AB_separate <- function(AB, q, k=NULL) {
-  if (is.null(k)) {
-    k <- ncol(AB) - q
-  } else {
-    stopifnot(q+k == ncol(AB))
-  }
-  if ( k == 0) {
-    A = AB
-    B = NULL
-  } else {
-    A = AB[, 1:q, drop = F]
-    B = AB[, (q+1):ncol(AB), drop=F]
-  }
-  list(A = A, B = B)
-}
 
 #  used only for testing, AB is never computed at each iteration...
 compute_AB_update <- function (Y, Z, X, B, A, phi, families, Miss=NULL) {
@@ -167,6 +213,8 @@ compute_psi_star_known_Z <- function(Y, X, Z, parameters, families, Miss, comput
 
   list(psi_AB = psi_AB, psi_phi = psi_phi, psi_AB_hessian = psi_AB_hessian, linpar=linpar, Z=Z)
 }
+
+
 compute_hessian_x_psi <- function(AB_psi, AB_hessian) {
   prod <- sapply(seq_along(AB_hessian), function(j) {
     as.vector(solve(AB_hessian[[j]], AB_psi[j,]))
@@ -210,6 +258,7 @@ compute_psi_phi <- function (Y, phi, linpar_bprime, families, Miss) {
     if(is.null(Miss)) {
       # psi_phi[id] <- (colMeans((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved
       psi_phi[id] <- (colMeans(scale((Y[,id] - linpar_bprime[,id]), scale=F)**2) - phi[id]) / 5  # this is rescaled appropriately..
+      # psi_phi[id] <- t(Y[,id]) %*% linpar_bprime[,id]/nrow(Y[,id])
     } else {
       Y[,id][Miss[,id]] <- 0
       # psi_phi[id] <- (colSums((Y[,id] - linpar_bprime[,id])**2) - phi[id]) / (2 * phi[id]**2) # this is theoretically correct, but badly behaved

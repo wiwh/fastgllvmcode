@@ -1,0 +1,73 @@
+---
+title: ""
+author: ""
+date: ''
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Gaussian Example
+While `fasgllvm` can be used for Gaussian responses, it is unnecessarily complicated: the gaussian model admits closed form expressions for my algorithm to compute the MLE, and another function,`ffa` -- not yet published -- converges orders of magnitude faster and does not require the convergence to  be manually checked. With proper care, especially in small dimensions, `fastgllvm` converges to the same values as `ffa`. `fastgllvm` should still produce good results, as we now demonstrate.
+
+
+```{r}
+library(fastgllvm)
+data <- read.table("dataset.dat", header=T)
+```
+
+
+## Setting 1: p=4, q=1
+
+Be sure to include an intercept if the data $Y$ are not centered. I think `factanal` factorizes the correlation matrix (so centering is done automatically). 
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=TRUE}
+F1<-factanal(x = ~x1 + x2 + x3 + x9, factors = 1, data = data[, c(1:3, 9)])
+
+Y<-data[,c(1:3,9)]
+
+Y<-as.matrix(Y)
+
+set.seed(1234)
+fit<-fastgllvm(Y, q = 1, family="gaussian",  intercept = T) 
+```
+
+The function `fastgllvm` requires to check the convergence of the stochastic algorithm, which can be done visually using the `plot` function (automatic checks will be implemented later):
+
+If necessary, update the fit by running more iterations using the `update` function:
+
+```{r eval=FALSE, include=TRUE}
+fit <- update(fit)
+```
+
+## Setting 2: p=9, q=3
+```{r}
+Y <- as.matrix(data)
+F2 <- factanal(Y, factors = 3)
+
+set.seed(12345)
+fit <- fastgllvm(Y, q=3, family="gaussian", intercept = T, controls=list(minit=100))
+```
+
+One can check if the factorization was successful by plotting the elements of the sample covariance of Y against those of its estimated factorization $\Lambda\Lambda^\top + \Psi$:
+
+```{r echo=FALSE, out.width="70%"}
+F2cov <- F2$loadings %*% t(F2$loadings) + diag(F2$uniquenesses)
+fgcov <- fit$parameters$A %*% t(fit$parameters$A) + diag(fit$parameters$phi)
+fgcov <- diag((diag(fgcov))**-0.5) %*% fgcov %*% diag((diag(fgcov))**-0.5)
+
+
+fa <- ffa(Y, 6, iteratively_update_Psi = T)
+
+facov <- fa$A %*% t(fa$A) + diag(fa$Psi)
+facov <- diag((diag(facov))**-0.5) %*% facov %*% diag((diag(facov))**-0.5)
+
+
+plot(covY, F2cov, xlab="sample covariance elements", ylab="estimated elements")
+points(covY, fgcov, col=2); abline(0,1,col=2)
+points(covY, facov, col=3)
+legend(x="bottomright", c("factanal", "fastgllvm"), pch=c(1,1), col=c(1,2), title="Estimator")
+
+```

@@ -1,13 +1,15 @@
-
-
-initialize_parameters <- function(A = NULL, B= NULL, phi=NULL, p, q, k) {
-  if (is.null(A)) A <- matrix(0, p, q)
-  if (is.null(B)) B <- matrix(0, p, k)
-  if (is.null(phi)) phi <- rep(1, p)
-  list(A = A, B = B, phi = phi)
+initialize_parameters <- function(parameters, dimensions, method) {
+  if (method == "full") {
+    parameters <- initialize_parameters_full(parameters, dimensions)
+  }
+  if (method == "simple") {
+    parameters <- initialize_parameters_simple(parameters, dimensions)
+  }
+  parameters
 }
 
 initialize_controls <- function(controls) {
+  stopifnot(is.list(controls))
   if (is.null(controls[["maxit"]])) controls$maxit <- 100
   if (is.null(controls[["alpha"]])) controls$alpha <- 1
   if (is.null(controls[["beta"]]))  controls$beta  <- 0
@@ -25,29 +27,39 @@ initialize_controls <- function(controls) {
   controls
 }
 
+initialize_gradients <- function(parameters, method){
+  if (method == "full") {
+    gradients <- initialize_gradients_full(parameters)
+  }
+  if( method == "simple") {
+    gradients <- initialize_gradients_simple(parameters)
+  }
+  gradients
+}
+
 #' Function factory to return a function that generates a learning rate as a function of i
 #'
 #' @param method: the name of the method to use. One of "constant", "lin", "exp", "linexp", "spall".
 #' @param method.args: list of method arguments
-initialize_learning_rate <- function(method="constant", maxit, learning_rate.args=list()){
+initialize_learning_rate <- function(maxit, learning_rate.args=list(method="spall")){
   if(is.null(learning_rate.args))       learning_rate.args <- list()
   if(is.null(learning_rate.args$start)) learning_rate.args$start <- 1
   if(is.null(learning_rate.args$end))   learning_rate.args$end <- 0.005
-  if(is.null(learning_rate.args$constant)) learning_rate.args$constant <- 10
+  if(is.null(learning_rate.args$constant)) learning_rate.args$constant <- 1
 
-  if(method=="constant"){
+  if(learning_rate.args$method=="constant"){
     learning_rate <- function(i){
       rep(learning_rate.args$constant, length(i))
     }
   }
-  if(method=="lin"){
+  if(learning_rate.args$method=="lin"){
     lr <- with(learning_rate.args,
                seq(start, end, l=maxit))
     learning_rate <- function(i){
       lr[i]
     }
   }
-  if(method=="exp"){
+  if(learning_rate.args$method=="exp"){
     lr <- with(learning_rate.args, {
       rho <- exp(log(end/start)/(maxit-1))
       rep(start, maxit) * rho**(0:(maxit-1))
@@ -56,7 +68,7 @@ initialize_learning_rate <- function(method="constant", maxit, learning_rate.arg
       lr[i]
     }
   }
-  if(method=="linexp"){
+  if(learning_rate.args$method=="linexp"){
     if(is.null(learning_rate.args$weight.exp))learning_rate.args$weight.exp <- .5
     lr.lin <- with(learning_rate.args,
                    seq(start, end, l=maxit))
@@ -69,7 +81,7 @@ initialize_learning_rate <- function(method="constant", maxit, learning_rate.arg
       lr[i]
     }
   }
-  if(method=="spall"){
+  if(learning_rate.args$method=="spall"){
     if(is.null(learning_rate.args$rate)) learning_rate.args$rate <- 1000
     lr <- with(learning_rate.args, {
       b <- exp(log(end / start) / rate)
@@ -89,7 +101,7 @@ initialize_learning_rate <- function(method="constant", maxit, learning_rate.arg
 #' @param fastgllvm: an object of class ''fastgllvm''
 #' @param target: if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target
 #' @param rescale: if true, both Z and A will be rescaled so that Z%*%t(A) remains unchanged but Z has variance identity.
-compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=T) {
+compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=F) {
   pb <- txtProgressBar(style=3, width=40)
   cat(" Initializing: ")
   with(fastgllvm, {
@@ -122,20 +134,21 @@ compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=T)
     setTxtProgressBar(pb, 0.4, title="Initializing A")
     cat(" Initializing A and phi...")
     # Initialize A and phi
-    fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=10) # TODO: there must be some Z here as well...
-    A <- fit.ffa$A * (1+colMeans(NAs))  # TODO: make ffa work with NAs, but this trick is ok for initialization
+    Y.transformed[NAs] <- NA
+    fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=100, iteratively_update_Psi = T) # TODO: there must be some Z here as well...
     phi <- rep(1, dimensions$p)
     phi[families$id$gaussian] <- fit.ffa$Psi[families$id$gaussian]
 
 
-    # go to target
+    A <- fit.ffa$A
+    # transform to target
     if (!is.null(target)) {
       A <- psych::Procrustes(A, target)$loadings
     }
     setTxtProgressBar(pb, 0.9, title="Initializing Z")
     cat(" Initializing Z...")
     # initialize Z
-    Z <- init_Z(Y.transformed, A, phi)
+    Z <- fit.ffa$Z
     if(rescale) {
       rescaled <- rescale(Z, A)
       A=rescaled$A
@@ -149,12 +162,49 @@ compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=T)
   })
 }
 
-init_Z <- function(Y, A, phi) {
-  Y %*% (A/phi) %*% solve(t(A) %*% (A/phi))
+# rescale Z to have unit diagonal variance, and A so that ZA remains the same value
+# target.cov: the target covariance matrix the new Z must match. If NULL, the variance is the identity matrix.
+rescale <- function(parameters, rescale.AB = F, target.cov=NULL, intercept=F) {
+  Z <- scale(parameters$Z, scale=F)
+  b <- matrix(attr(Z, "scaled:center"), nrow=1)
+
+  if (is.null(target.cov)) {
+    C <- chol((t(Z) %*% Z)/nrow(Z))
+    Cneg <- solve(C)
+    Z <- Z %*% Cneg
+
+  } else {
+    Z.c <- chol((t(Z) %*% Z)/nrow(Z))
+    target.c <- chol(target.cov)
+    C <- solve(target.c) %*% Z.c
+    Cneg <- solve(Z.c) %*% target.c
+    Z <- Z %*% Cneg
+
+  }
+  if (rescale.AB) {
+      parameters$A <- parameters$A %*% t(C)
+      if(!is.null(parameters$B) && intercept) {
+        parameters$B[,1] <- parameters$B[,1]  + as.vector(parameters$A %*% t(b))
+      }
+  }
+  # add the rescaled bias (p.137 in blue book)
+  if(!rescale.AB) {
+    Z <- t(t(Z) + as.vector(b %*% Cneg))
+  }
+  parameters$Z <- Z
+
+  parameters
 }
+
+
+
+
+# init_Z <- function(Y, A, phi) {
+#   Y %*% (A/phi) %*% solve(t(A) %*% (A/phi))
+# }
 # rescale Z to have unit diagonal variance, and A so that ZA remains the same value
 # target: a data matrix whose variance the transformed Z must match. If NULL, the variance is the identity matrix.
-rescale <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
+rescale.old <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
   Z <- scale(Z, scale=F)
   b <- matrix(attr(Z, "scaled:center"), nrow=1)
   if (is.null(target.data) && is.null(target.cov)) {
@@ -188,11 +238,11 @@ if(0) {
   devtools::load_all()
   set.seed(1231)
   fg <- gen_fastgllvm(nobs=1000, p=1000, q=20, family=c(rep("poisson", 500), rep("gaussian", 0), rep("binomial", 500)), k=1, intercept=1, miss.prob = 0.5)
-  fg <- gen_fastgllvm(nobs=1000, p=100, q=5, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
+  fg <- gen_fastgllvm(nobs=1000, p=100, q=10, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
   init <- compute_parameters_initial_values(fg, target=fg$parameters$A, rescale=F)
 
   plot(fg$parameters$A, init$A); abline(0,1,col=2)
-  points(fg$Z, init$Z, col=2)
+  points(fg$parameters$Z, init$Z, col=2)
   points(fg$parameters$phi, init$phi, col=3)
   points(fg$parameters$B, init$B, col=4)
 
@@ -200,7 +250,6 @@ if(0) {
   # TEST RESCALE
   A <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
   B <- scale(matrix(rnorm(100*4), 100, 4), scale=F)
-
 
   AA <- t(A) %*% A/nrow(A)
   BB <- t(B) %*% B/nrow(B)

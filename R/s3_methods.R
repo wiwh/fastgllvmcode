@@ -20,11 +20,11 @@ plot.fastgllvm <- function(f){
   if(length(f$fit) == 0) {
     stop("Fit the model before attempting to plot.")
   }
+  par(mfrow=c(3,1))
   ts.plot(f$fit$hist$A[,1:min(100, f$dimensions$p*f$dimensions$q)], main="Convergence plot: loadings.", xlab="Iteration")
-  par(ask=TRUE)
   ts.plot(f$fit$hist$B[,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration")
   ts.plot(f$fit$hist$phi[,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration")
-  par(ask=FALSE)
+  par(mfrow=c(1,1))
 }
 
 #' Update the fit with another round of stochastic approximation
@@ -39,6 +39,8 @@ update.fastgllvm <- function(f, ...){
   if (is.null(arguments[["controls"]])) {
     controls <- f$fit$controls
     controls$alpha <- controls$alpha/2
+  } else {
+    controls <- arguments[["controls"]]
   }
 
   if (is.null(arguments[["verbose"]])) {
@@ -48,8 +50,7 @@ update.fastgllvm <- function(f, ...){
   if (is.null(arguments[["hist"]])) {
     hist <- T
   }
-  parameters <- list(A=f$parameters$A, B=f$parameters$B, phi=f$parameters$phi, Z=f$Z, covZ=f$parameters$covZ)
-  fastgllvm.fit(f, parameters.init = parameters, controls=controls, verbose=verbose, hist=hist)
+  fastgllvm.fit(f, parameters.init = f$parameters, controls=controls, verbose=verbose, hist=hist)
 }
 
 simulate_fastgllvm <- function(fastgllvm, n=NULL){
