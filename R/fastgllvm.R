@@ -416,20 +416,18 @@ if(0) {
     devtools::load_all()
     set.seed(1234)
     poisson  <- 0
-    gaussian <- 9
-    binomial <- 0
-    q <- 3
+    gaussian <- 0
+    binomial <- 20
+    q <- 2
     p <- poisson + gaussian + binomial
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(120303)
-    fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
+    fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
     # check initialization
-    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=500, maxit=500,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="constant")))
+    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=200, maxit=200,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="spall")))
+    fit.simple <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=200, maxit=200,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="spall")), method="simple")
     plot(fit)
-    for(i in 1:5){
-      fit <- update(fit)
-    }
-    plot(fit)
+    plot(fit.simple)
 
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
 
@@ -451,14 +449,17 @@ if(0) {
     plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
     points(fg$parameters$A, psych::Procrustes(fa$loadings, fg$parameters$A)$loadings, col=2);abline(0,1,col=2)
 
-    fit.ltm <- ltm(fg$Y ~z1+z2)
-    plot(fg$parameters$A, fit.ltm$coefficients[,1], xlim=c(-3,3), ylim=c(-3,3))
-    points(fg$parameters$A, fit$parameters$A, col=2)
+    library(ltm)
+    fit.ltm <- ltm(fg$Y ~z1 + z2)
+    plot(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,1:2], fg$parameters$A)$loadings, xlim=c(-3,3), ylim=c(-3,3))
+    points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
+    points(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
     abline(0,1,col=2)
     abline(0,-1,col=2)
 
     compute_error(fit.ltm$coefficients[,1], fg$parameters$A, rotate=T)
     compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
+    compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T)
 
 
 

@@ -20,27 +20,12 @@ initialize_gradients_simple <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
 
-compute_gradients_simple <- function(Y, X, parameters, families, Miss, debiase) {
-  A_old <- parameters$A
-  Z_old <- parameters$Z
-  # begin by rescaling
-  resc <- rescale(parameters$Z, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  parameters$Z <- resc$Z
+compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
+  parameters_old <- parameters
 
-  # update_A <- A_old - parameters$A
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-  # A_old <- parameters$A
-  # TODO: optimize the rescaling for B too...
-  if(!is.null(parameters$B) && all(X[,1]==1)) {
-    Z0 <- scale(Z0, scale=F)
-    parameters$B[,1] <- parameters$B[,1]  - as.vector(parameters$A %*% attr(Z0, "scaled:center"))
-  }
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
+  if(!is.null(parameters$B) && all(X[,1]==1)) rescale.B=1 else rescale.B=FALSE
+
+  # parameters <- rescale(parameters, rescale.A=T, rescale.B=rescale.B, target.cov = parameters$covZ)
 
   # Generate sim
   Y_sim <- generate_y(
@@ -54,36 +39,33 @@ compute_gradients_simple <- function(Y, X, parameters, families, Miss, debiase) 
     nobs = nrow(Y)
   )
 
+
+  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters_old$Z, Miss=Miss)$Zstar
+  Z0 <- scale(Z0, scale=F)
+  # Z0 <- rescale(parameters)$Z
   # Obtain Zh
   Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  # covZ <- .9*parameters$covZ + .1 * cov(Zh)
+  Zh <- scale(Zh, scale=F)
   covZ <- cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-
-
-  # rescale Zh
-  resc <- rescale(Zh, target.cov = parameters$covZ)
-  Zh <- resc$Z
+  # Zh <- rescale(parameters)$Z
 
   # compute psi on this
   psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
   psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
 
 
-  # update
-  if(debiase) {
-    # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
+  # Compute both updates
+  AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
+  AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
+  AB_update <- AB_update_sam - AB_update_sim
+
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
 
-  Z_update <- Z_old - psi_sam$Z # TODO: or take from the parameter update
+  A_update   <- parameters_old$A - parameters$A + AB_update$A
+  B_update   <- parameters_old$B - parameters$B + AB_update$B
+  phi_update <- psi_sim$psi_phi  - psi_sam$psi_phi
+  Z_update   <- parameters_old$Z - psi_sam$Z
+  covZ_update <- parameters$covZ - covZ
 
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
+  list(A = A_update, B= B_update, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }

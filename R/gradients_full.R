@@ -88,39 +88,17 @@ compute_gradients_full <- function(Y, X, parameters, families, Miss, debiase) {
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 
-compute_gradients_full.new <- function(Y, X, parameters, families, Miss, debiase) {
-  A_old <- parameters$A
-  Z_old <- parameters$Z
+
+compute_gradients_full_new <- function(Y, X, parameters, families, Miss, debiase) {
+  parameters_old <- parameters
   # begin by rescaling
-  if(!is.null(parameters$B) && !any(X[,1]!=1)) {
-    intercept <- T # TODO: this is inefficient here...
-  } else {
-    intercept <-
-      F
-  }
-  parameters <- rescale(parameters, rescale.AB=T, target.cov=parameters$covZ, intercept = intercept)
-  # browser()
-  # parameters$Z <-t(t(parameters$Z) + runif(5))
-  # resc.old <- rescale.old(parameters$Z, parameters$A, target.cov=parameters$covZ)
-  # resc.new <- rescale(parameters, rescale.AB=T, target.cov=parameters$covZ, intercept=intercept)
-  # all.equal(resc.old$Z, resc.new$Z)
-  # all.equal(resc.old$A, resc.new$A)
-  # lp1 <- with(parameters, compute_linpar(Z, A, X, B))
-  # lp2 <- with(resc.new, compute_linpar(Z, A, X, B))
-  # all.equal(lp1, lp2)
+  if(!is.null(parameters$B) && all(X[,1]==1)) rescale.B=1 else F
 
-  # parameters$A <- resc$A
-  # parameters$Z <- resc$Z
+  parameters <- rescale(parameters, rescale.A = T, rescale.B=rescale.B, target.cov=parameters$covZ)
 
-
-  # update_A <- A_old - parameters$A
   # Compute zhat on sample
   Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  # rescale
-
-  resc <- rescale(Z0, parameters$A, target.cov=parameters$covZ)
-  parameters$A <- resc$A
-  Z0 <- resc$Z
+  parameters <- rescale(parameters, rescale.A = T, rescale.B =rescale.B,  target.cov=parameters$covZ)
 
   # Generate sim
   Y_sim <- generate_y(
@@ -133,7 +111,6 @@ compute_gradients_full.new <- function(Y, X, parameters, families, Miss, debiase
     Z = NULL,
     nobs = nrow(Y)
   )
-
   # Obtain Zh
   Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
   # update covZ
@@ -141,9 +118,8 @@ compute_gradients_full.new <- function(Y, X, parameters, families, Miss, debiase
   covZ <- cov(Zh)
   covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
 
-
   # rescale Zh
-  resc <- rescale(Zh, target.cov = parameters$covZ)
+  resc <- rescale(parameters, target.cov = parameters$covZ)
   Zh <- resc$Z
 
   # compute psi on this
@@ -161,11 +137,14 @@ compute_gradients_full.new <- function(Y, X, parameters, families, Miss, debiase
     AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
   }
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
-  phi_update <- psi_sim$psi_phi - psi_sam$psi_phi
 
-  Z_update <- Z_old - psi_sam$Z # TODO: or take from the parameter update
+  A_update <- AB_update$A + parameters_old$A - parameters$A
+  B_update <- AB_update$B + parameters_old$B - parameters$B
+  phi_update <- (psi_sim$psi_phi - psi_sam$psi_phi)
+  Z_update <- parameters_old$Z - psi_sam$Z # TODO: or take from the parameter update
 
-  list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
+
+  list(A = A_update, B= B_update, phi=phi_update, Z = Z_update, covZ=covZ_update)
 }
 
 
@@ -369,13 +348,21 @@ if(0) {
 
   devtools::load_all()
   set.seed(1423)
-  poisson  <- 0
-  gaussian <- 1000
-  binomial <- 0
+  poisson  <- 10
+  gaussian <- 10
+  binomial <- 10
   p <- poisson + gaussian + binomial
   fg <- gen_fastgllvm(nobs=100, p=p, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F, miss.prob = 0)
   zhat <- with(fg, compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, Miss=Miss))
   plot(fg$Z, zhat$Zstar)
+
+  # test that the gradient has expectation 0
+  sim <- sapply(1:100, function(i){
+    fg <- gen_fastgllvm(nobs=100, p=p, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F, miss.prob = 0)
+    compute_gradients_full(fg$Y, fg$X, fg$parameters, fg$families, fg$Miss, debiase=T)
+  })
+
+  sim_A <- do.call(rbind, sapply(sim, function(simi)as.vector(simi$A)))
 
   AB1 <- with(fg, compute_A_glm(Y, Z, X, families, maxit=1))
   AB2 <- with(fg, compute_A_glm(Y, Z, X, families, maxit=2))

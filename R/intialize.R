@@ -162,9 +162,11 @@ compute_parameters_initial_values <- function(fastgllvm, target=NULL, rescale=F)
   })
 }
 
-# rescale Z to have unit diagonal variance, and A so that ZA remains the same value
-# target.cov: the target covariance matrix the new Z must match. If NULL, the variance is the identity matrix.
-rescale <- function(parameters, rescale.AB = F, target.cov=NULL, intercept=F) {
+# rescale Z to have target.cov empirical variance
+# if rescale.A is TRUE, also rescale A
+# if rescale.B is an integer j>0 corresponding to the intercept column of the design matrix X, then rescale B to absorb the intercept
+# if both rescale.A and rescale.B are True, the linpar will be the same after the rescaling. This behavior is tested below.
+rescale <- function(parameters, rescale.A = F, rescale.B = F, target.cov=NULL) {
   Z <- scale(parameters$Z, scale=F)
   b <- matrix(attr(Z, "scaled:center"), nrow=1)
 
@@ -179,16 +181,17 @@ rescale <- function(parameters, rescale.AB = F, target.cov=NULL, intercept=F) {
     C <- solve(target.c) %*% Z.c
     Cneg <- solve(Z.c) %*% target.c
     Z <- Z %*% Cneg
-
   }
-  if (rescale.AB) {
-      parameters$A <- parameters$A %*% t(C)
-      if(!is.null(parameters$B) && intercept) {
-        parameters$B[,1] <- parameters$B[,1]  + as.vector(parameters$A %*% t(b))
-      }
+
+  # must appear before parameters$A is rescaled
+  if(rescale.B) {
+    parameters$B[,rescale.B] <- parameters$B[,rescale.B]  + as.vector(parameters$A %*% t(b))
+  }
+  if (rescale.A) {
+    parameters$A <- parameters$A %*% t(C)
   }
   # add the rescaled bias (p.137 in blue book)
-  if(!rescale.AB) {
+  if(!rescale.B) {
     Z <- t(t(Z) + as.vector(b %*% Cneg))
   }
   parameters$Z <- Z
@@ -233,6 +236,23 @@ rescale.old <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
   # TODO: TEST THAT: Zt(A) (after centing Z) remains the same
   list(Z=Z, A=A)
 }
+
+# testing that rescale does not change the linear parameter
+
+if(0) {
+  devtools::load_all()
+  fg <- gen_fastgllvm(n= 100, p=10, q=3, k=1, intercept=T, family="gaussian")
+  linpar0 <- with(fg$parameters, compute_linpar(Z, A, fg$X, B))
+  resc <- rescale(fg$parameters, rescale.A=T, rescale.B=1)
+  linpar1 <- with(resc, compute_linpar(Z, A, fg$X, B))
+  all.equal(linpar0$linpar, linpar1$linpar)
+
+  # without rescaling B
+  resc <- rescale(fg$parameters, rescale.A=T, rescale.B=F)
+  linpar1 <- with(resc, compute_linpar(Z, A, fg$X, B))
+  all.equal(linpar0$linpar, linpar1$linpar)
+}
+
 
 if(0) {
   devtools::load_all()
