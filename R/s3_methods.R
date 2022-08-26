@@ -22,7 +22,9 @@ plot.fastgllvm <- function(f){
   }
   par(mfrow=c(3,1))
   ts.plot(f$fit$hist$A[,1:min(100, f$dimensions$p*f$dimensions$q)], main="Convergence plot: loadings.", xlab="Iteration", col=1:min(100, f$dimensions$p*f$dimensions$q), lwd=2)
-  ts.plot(f$fit$hist$B[,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
+  if(!is.null(f$fit$hist$B)) {
+    ts.plot(f$fit$hist$B[,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
+  }
   ts.plot(f$fit$hist$phi[,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
   par(mfrow=c(1,1))
 }

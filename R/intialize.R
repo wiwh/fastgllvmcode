@@ -34,6 +34,9 @@ initialize_gradients <- function(parameters, method){
   if( method == "simple") {
     gradients <- initialize_gradients_simple(parameters)
   }
+  if( method == "rescale") {
+    gradients <- initialize_gradients_simple(parameters)
+  }
   gradients
 }
 
@@ -199,8 +202,14 @@ rescale <- function(parameters, rescale.A = F, rescale.B = F, target.cov=NULL) {
   parameters
 }
 
-
-
+# Recenter Z,
+# intercept: numerical value of beta
+recenter <- function(parameters, intercept.id) {
+  parameters$Z <- scale(parameters$Z, scale=F)
+  b <- matrix(attr(parameters$Z, "scaled:center"), nrow=1)
+  parameters$B[,intercept.id] <- parameters$B[,intercept.id]  + as.vector(parameters$A %*% t(b))
+  parameters
+}
 
 # init_Z <- function(Y, A, phi) {
 #   Y %*% (A/phi) %*% solve(t(A) %*% (A/phi))

@@ -88,17 +88,9 @@ compute_gradients_full <- function(Y, X, parameters, families, Miss, debiase) {
   list(A = AB_update$A + A_old - parameters$A, B= AB_update$B, phi=phi_update, Z=Z_update, covZ=covZ_update)
 }
 
-
-compute_gradients_full_new <- function(Y, X, parameters, families, Miss, debiase) {
-  parameters_old <- parameters
-  # begin by rescaling
-  if(!is.null(parameters$B) && all(X[,1]==1)) rescale.B=1 else F
-
-  parameters <- rescale(parameters, rescale.A = T, rescale.B=rescale.B, target.cov=parameters$covZ)
-
-  # Compute zhat on sample
-  Z0 <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-  parameters <- rescale(parameters, rescale.A = T, rescale.B =rescale.B,  target.cov=parameters$covZ)
+compute_gradients_full <- function(Y, X, parameters, families, Miss, debiase) {
+  parameters_sam <- parameters_sim <- parameters
+  parameters_sam$Z <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
 
   # Generate sim
   Y_sim <- generate_y(
@@ -111,41 +103,28 @@ compute_gradients_full_new <- function(Y, X, parameters, families, Miss, debiase
     Z = NULL,
     nobs = nrow(Y)
   )
-  # Obtain Zh
-  Zh <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-  # update covZ
-  # covZ <- .9*parameters$covZ + .1 * cov(Zh)
-  covZ <- cov(Zh)
-  covZ_update <- parameters$covZ - covZ # this will be substracted from parameters$covZ
-
-  # rescale Zh
-  resc <- rescale(parameters, target.cov = parameters$covZ)
-  Zh <- resc$Z
+  parameters_sim$Z <- compute_zstar(Y_sim$Y, parameters$A, parameters$phi, X, parameters$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
 
   # compute psi on this
-  psi_sam <- compute_psi_star_known_Z(Y, X, Z0, parameters, families, Miss, compute_hessian=T)
-  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, Zh, parameters, families, Miss, compute_hessian=T)
+  psi_sam <- compute_psi_star_known_Z(Y, X, parameters_sam$Z, parameters, families, Miss, compute_hessian=T)
+  psi_sim <- compute_psi_star_known_Z(Y_sim$Y, X, parameters_sim$Z, parameters, families, Miss, compute_hessian=T)
 
 
-  # update
-  if(debiase) {
-    # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-    AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
-    AB_update <- AB_update_sam - AB_update_sim
-  } else {
-    AB_update <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
-  }
+  # AB_update <- compute_hessian_x_psi(psi_sam$psi_AB - psi_sim$psi_AB, psi_sam$psi_AB_hessian)
+  AB_update_sam <- compute_hessian_x_psi(psi_sam$psi_AB, psi_sam$psi_AB_hessian)
+  AB_update_sim <- compute_hessian_x_psi(psi_sim$psi_AB, psi_sim$psi_AB_hessian)
+  AB_update <- AB_update_sam - AB_update_sim
+
   AB_update <- AB_separate(AB_update, ncol(parameters$A))
-
-  A_update <- AB_update$A + parameters_old$A - parameters$A
-  B_update <- AB_update$B + parameters_old$B - parameters$B
   phi_update <- (psi_sim$psi_phi - psi_sam$psi_phi)
-  Z_update <- parameters_old$Z - psi_sam$Z # TODO: or take from the parameter update
+
+  Z_update <- parameters$Z - parameters_sam$Z
 
 
-  list(A = A_update, B= B_update, phi=phi_update, Z = Z_update, covZ=covZ_update)
+  list(A = AB_update$A, B= AB_update$B, phi=phi_update, Z=Z_update)
 }
+
+
 
 
 #  used only for testing, AB is never computed at each iteration...
@@ -219,6 +198,18 @@ compute_psi_AB_hessian <- function (ZX, phi, linpar_bprimeprime, Miss) {
     -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/phi[j]
   }, simplify=F)
 }
+# compute_psi_AB_hessian <- function (Z, X, phi, linpar_bprimeprime, Miss) {
+#   warning("NOT THE REAL AB HESSIAN:check function compute_psi_AB_hessian")
+#   library(Matrix)
+#   if (!is.null(Miss)) {
+#     linpar_bprimeprime[Miss] <- 0 # do at the parent lvl... this trick is OK, check NA.RMd
+#   }
+#   # compute a list of all hessians
+#   sapply(1:length(phi), function(j) {
+#     -bdiag((t(Z) %*% (Z*(linpar_bprimeprime[,j])))/phi[j], (t(X) %*% (X*(linpar_bprimeprime[,j])))/phi[j])
+#   }, simplify=F)
+# }
+
 
 
 # This is only for testing purposes, supposed to be equal to the above

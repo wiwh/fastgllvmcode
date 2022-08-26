@@ -45,7 +45,8 @@ fastgllvm <- function(Y,
                       controls=list(),
                       method="full",
                       verbose = F,
-                      hist = T) {
+                      hist = T,
+                      median= F) {
 
   stopifnot(is.matrix(Y))
 
@@ -85,12 +86,12 @@ fastgllvm <- function(Y,
   fg <- new_fastgllvm(Y, X, parameters, families, dimensions)
   fg$method <- method
   fg$intercept <- intercept
-  fastgllvm.fit(fg, controls, verbose, hist)
+  fastgllvm.fit(fg, controls, verbose, hist, median=median)
 
 }
 
 
-fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
+fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, median=F) {
   # we store gradients and parameters in a list
   if (!is.null(parameters.init)) {
     parameters <- parameters.init
@@ -103,9 +104,13 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
   # One may define other functions to compute gradients
   if(fg$method == "full") compute_gradients <- compute_gradients_full
   if(fg$method == "simple") compute_gradients <- compute_gradients_simple
+  if(fg$method == "rescale") compute_gradients <- compute_gradients_simple_rescale
 
 
+  zstar <- compute_zstar(fg$Y, parameters$A, parameters$phi, fg$X, parameters$B, fg$families)$Zstar
   params_hist <- list()
+  if(hist) params_hist <- c(params_hist, list(parameters))
+
   moving_average <- parameters
   crit <- Inf
 
@@ -114,6 +119,7 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
   if(is.null(controls[["learning_rate"]])) controls$learning_rate <- initialize_learning_rate(maxit=controls$maxit, learning_rate.args = controls$learning_rate.args)
 
   for(i in 1:controls$maxit){
+    # if(i < controls$maxit/2) median <- .5 else median <- F
     moving_average_old <- moving_average
     gradients_old <- gradients
     # get the gradient
@@ -125,7 +131,18 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
     }
     # update step
     for (par in names(parameters)) {
-      parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * gradients[[par]]
+      if(is.null(parameters[[par]])) next()
+      if(par == "Z") {
+        # we replace the previous value with the new one  THIS IS IMPORTANT
+        parameters[[par]] <- parameters[[par]] - gradients[[par]]
+      } else {
+        # we do one step
+        if (median) {
+          parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * sign(gradients[[par]]) * median
+        } else {
+          parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * gradients[[par]]
+        }
+      }
     }
     parameters <- check_update_parameters(parameters)
 
@@ -134,7 +151,7 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL) {
       moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * parameters[[k]]
     }
 
-    if(i == 1 || i%%5 == 0 || i == controls$maxit){
+    if(i == 1 || i%%10 == 0 || i == controls$maxit){
       crit <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
       cat("\n Iteration: ", i, " - crit: ", crit)
     }
@@ -411,23 +428,73 @@ generate_families <- function(family, p){
   families
 }
 
+
+# testing the correlation between series
+if(0){
+  devtools::load_all()
+  set.seed(1234)
+  poisson  <- 0
+  gaussian <- 0
+  binomial <- 500
+  intercept <- T
+  q <- 1
+  p <- poisson + gaussian + binomial
+  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
+  set.seed(1030)
+  fg <- gen_fastgllvm(nobs=200, p=p, q=q, family=family, intercept=intercept, B=matrix(runif(p, 0,2), p, 1), miss.prob = 0, scale=1)
+  # check initialization
+  set.seed(1234)
+  fit.simple <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall")), method="simple", median=T)
+  plot(fit.simple)
+
+  h <- fit.simple$fit$hist
+  image(cor(cbind(h$A, h$B)))
+}
+
 # SOME TESTS
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 0
+    poisson  <- 100
     gaussian <- 0
-    binomial <- 20
-    q <- 2
+    binomial <- 0
+    intercept <- T
+    q <- 1
     p <- poisson + gaussian + binomial
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-    set.seed(120303)
-    fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
+    set.seed(1030)
+    fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, intercept=intercept, B=matrix(runif(p, 0,2), p, 1), miss.prob = 0, scale=1)
     # check initialization
-    fit <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=200, maxit=200,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="spall")))
-    fit.simple <- fastgllvm(fg$Y, q = q, X=fg$X, family=family,  intercept = T, hist=T, controls = list(minit=200, maxit=200,alpha=.5, beta=0, eps=1e-3, learning_rate.args=list(method="spall")), method="simple")
+    set.seed(123)
+    fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     plot(fit)
+    # ts.plot(fit$fit$hist$Z)
+    set.seed(1234)
+    fit.simple <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=.1, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall")), method="simple", median=T)
     plot(fit.simple)
+    ts.plot(fit.simple$fit$hist$Z[,1:100])
+
+
+    library(ltm)
+    if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
+    if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
+    plot(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings)#, xlim=c(-5,5), ylim=c(-5,5))
+    points(fg$parameters$B, fit.ltm$coefficients[,1], pch=2)
+    points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
+    points(fg$parameters$B, fit$parameters$B, pch=2, col=2)
+    points(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
+    points(fg$parameters$B, fit.simple$parameters$B, pch=2, col=3)
+    legend(x="bottomright",pch=1,  legend=c("ltm","full", "simple"), col=1:3)
+    abline(0,1,col=2)
+    abline(0,-1,col=2)
+    compute_error(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)
+    compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
+    compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T)
+
+    plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
+    plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
+
+
 
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
 
@@ -439,8 +506,10 @@ if(0) {
 
     plot(cor(fg$Y), compute_cov(fit.ffa$A, fit.ffa$Psi))
     points(cor(fg$Y), compute_cov(fit$parameters$A, fit$parameters$phi), col=2)
+    points(cor(fg$Y), compute_cov(fit.simple$parameters$A, fit.simple$parameters$phi), col=3)
 
     fa <- factanal(fg$Y, q)
+    fit <- fit.simple
     cov1 <- fit$parameters$A %*% t(fit$parameters$A) + diag(fit$parameters$phi)
     cov1 <- diag(diag(cov1)**-0.5)%*% cov1 %*%diag(diag(cov1)**-0.5)
     cov2 <- fa$loadings %*% t(fa$loadings) + diag(fa$uniquenesses)
@@ -449,25 +518,20 @@ if(0) {
     plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
     points(fg$parameters$A, psych::Procrustes(fa$loadings, fg$parameters$A)$loadings, col=2);abline(0,1,col=2)
 
-    library(ltm)
-    fit.ltm <- ltm(fg$Y ~z1 + z2)
-    plot(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,1:2], fg$parameters$A)$loadings, xlim=c(-3,3), ylim=c(-3,3))
-    points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
-    points(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
-    abline(0,1,col=2)
-    abline(0,-1,col=2)
-
-    compute_error(fit.ltm$coefficients[,1], fg$parameters$A, rotate=T)
-    compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
-    compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T)
 
 
 
+  # For binary
   library(mirtjml)
   fit.m <- mirtjml_expr(fg$Y, q, tol = 1e-2)
-  compute_error(fit.m$A_hat, fg$parameters$A, rotate = T)
 
-  plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
+  fit.fg <- fit.simple
+
+  compute_error(fit.m$A_hat, fg$parameters$A, rotate = T)
+  compute_error(fit.fg$parameters$A, fg$parameters$A, rotate=T)
+
+
+  plot(fg$parameters$Z, fit.fg$parameters$Z); abline(0,-1,col=2)
   plot(fg$par$A, psych::Procrustes(fit.fg$parameters$A, fg$parameters$A)$loadings); abline(0,1,col=2)
   points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
   plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)
@@ -475,8 +539,7 @@ if(0) {
 
   ts.plot(fit.fg$fit$hist$A[,1:min(100, p*q)])
   ts.plot(fit.fg$fit$hist$B[,1:p])
-  ts.plot(fit.fg$fit$hist$Z.cov[,1:q])
-  plot(fit.fg$fit$learning_rate)
+  ts.plot(fit.fg$fit$hist$Z[,1:min(100, fg$dimensions$n*q)])
 
   compute_error(fit.fg$parameters$B, fg$parameters$B)
   compute_error(fit.m$d_hat, fg$parameters$B)
