@@ -126,25 +126,10 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, med
     gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
 
     # exponential smoothing step
-    for (par in names(parameters)) {
-      gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
-    }
-    # update step
-    for (par in names(parameters)) {
-      if(is.null(parameters[[par]])) next()
-      if(par == "Z") {
-        # we replace the previous value with the new one  THIS IS IMPORTANT
-        parameters[[par]] <- parameters[[par]] - gradients[[par]]
-      } else {
-        # we do one step
-        if (median) {
-          parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * sign(gradients[[par]]) * median
-        } else {
-          parameters[[par]] <- parameters[[par]] - controls$alpha * controls$learning_rate(i) * gradients[[par]]
-        }
-      }
-    }
-    parameters <- check_update_parameters(parameters)
+    # for (par in names(parameters)) {
+    #   gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
+    # }
+    parameters <- update_parameters(parameters, gradients, alpha=controls$alpha, learning_rate_i = controls$learning_rate(i), median=median)
 
     # We track a moving average of the last 1/controls$ma iterates
     for(k in seq_along(parameters)){
@@ -429,66 +414,57 @@ generate_families <- function(family, p){
 }
 
 
-# testing the correlation between series
-if(0){
-  devtools::load_all()
-  set.seed(1234)
-  poisson  <- 0
-  gaussian <- 0
-  binomial <- 500
-  intercept <- T
-  q <- 1
-  p <- poisson + gaussian + binomial
-  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(1030)
-  fg <- gen_fastgllvm(nobs=200, p=p, q=q, family=family, intercept=intercept, B=matrix(runif(p, 0,2), p, 1), miss.prob = 0, scale=1)
-  # check initialization
-  set.seed(1234)
-  fit.simple <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall")), method="simple", median=T)
-  plot(fit.simple)
-
-  h <- fit.simple$fit$hist
-  image(cor(cbind(h$A, h$B)))
-}
-
 # SOME TESTS
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 100
+    poisson  <- 0
     gaussian <- 0
-    binomial <- 0
-    intercept <- T
+    binomial <- 4
+    nobs <- 1000
     q <- 1
     p <- poisson + gaussian + binomial
+
+    intercept <- T
+    k <- 1
+    if(k==0 & intercept) k <- 1
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(1030)
-    fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, intercept=intercept, B=matrix(runif(p, 0,2), p, 1), miss.prob = 0, scale=1)
+    fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
     # check initialization
-    set.seed(123)
-    fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
-    plot(fit)
+    # set.seed(123)
+    # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
+    # plot(fit)
     # ts.plot(fit$fit$hist$Z)
-    set.seed(1234)
-    fit.simple <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=.1, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall")), method="simple", median=T)
+    set.seed(1304)
+    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=2, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="simple", median=.2)
+
+    history <- fit.simple$fit$hist
+    check_convergence(history)
+
+
     plot(fit.simple)
     ts.plot(fit.simple$fit$hist$Z[,1:100])
 
+    plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
+    plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
 
+
+    # LTM TEST
     library(ltm)
     if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
     if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
     plot(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings)#, xlim=c(-5,5), ylim=c(-5,5))
     points(fg$parameters$B, fit.ltm$coefficients[,1], pch=2)
-    points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
-    points(fg$parameters$B, fit$parameters$B, pch=2, col=2)
+    # points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
+    # points(fg$parameters$B, fit$parameters$B, pch=2, col=2)
     points(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
     points(fg$parameters$B, fit.simple$parameters$B, pch=2, col=3)
     legend(x="bottomright",pch=1,  legend=c("ltm","full", "simple"), col=1:3)
     abline(0,1,col=2)
     abline(0,-1,col=2)
     compute_error(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)
-    compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
+    # compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
     compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T)
 
     plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
@@ -496,7 +472,10 @@ if(0) {
 
 
 
+    # GAUSSIAN TEST
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
+    cat("\nError fg:", compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T))
+    cat("\nError ffa:", compute_error(fit.ffa$A, fg$parameters$A, rotate=T))
 
     compute_cov <- function(A, Psi){
       cov <- A %*% t(A) + diag(Psi)
@@ -504,9 +483,9 @@ if(0) {
       cov
     }
 
+    plot(fg$parameters$phi, fit.ffa$Psi);points(fg$parameters$phi, fit.simple$parameters$phi, col=2); abline(0,1,col=2)
     plot(cor(fg$Y), compute_cov(fit.ffa$A, fit.ffa$Psi))
-    points(cor(fg$Y), compute_cov(fit$parameters$A, fit$parameters$phi), col=2)
-    points(cor(fg$Y), compute_cov(fit.simple$parameters$A, fit.simple$parameters$phi), col=3)
+    points(cor(fg$Y), compute_cov(fit.simple$parameters$A, fit.simple$parameters$phi), col=3); abline(0,1,col=2)
 
     fa <- factanal(fg$Y, q)
     fit <- fit.simple
@@ -514,7 +493,7 @@ if(0) {
     cov1 <- diag(diag(cov1)**-0.5)%*% cov1 %*%diag(diag(cov1)**-0.5)
     cov2 <- fa$loadings %*% t(fa$loadings) + diag(fa$uniquenesses)
     plot(cor(fg$Y), cov1)
-    points(cor(fg$Y), cov2, col=2)
+    points(cor(fg$Y), cov2, col=2); abline(0,1)
     plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
     points(fg$parameters$A, psych::Procrustes(fa$loadings, fg$parameters$A)$loadings, col=2);abline(0,1,col=2)
 
