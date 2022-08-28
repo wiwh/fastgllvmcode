@@ -90,19 +90,28 @@ compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
   )
 
   # Compute psi for sam
-  parameters_sam$Z <- compute_zstar(Y, parameters_sam$A, parameters_sam$phi, X, parameters_sam$B, families, start=parameters_sam$Z, Miss=Miss)$Zstar
+  parameters_sam$Z <- scale(compute_zstar(Y, parameters_sam$A, parameters_sam$phi, X, parameters_sam$B, families, start=parameters_sam$Z, Miss=Miss)$Zstar, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
+  # parameters_sam$Z <- rescale(parameters_sam, T, 1)$Z
   psi_sam <- compute_psi_simple(Y, X, parameters_sam$Z, parameters_sam, families)
-  linpar <- compute_linpar(parameters_sam$Z, parameters_sam$A, X, parameters_sam$B)
-  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-  H_sam   <- compute_psi_AB_hessian(ZX_join(parameters_sam$Z, X), phi=parameters_sam$phi, linpar_bprimeprime = linpar_bprimeprime, Miss = Miss)
+
   # Compute psi for sim
-  parameters_sim$Z <- compute_zstar(Y_sim$Y, parameters_sim$A, parameters_sim$phi, X, parameters_sim$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
+  parameters_sim$Z <- scale(compute_zstar(Y_sim$Y, parameters_sim$A, parameters_sim$phi, X, parameters_sim$B, families, start=Y_sim$Z, Miss=Miss)$Zstar, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
+  # parameters_sim$Z <- rescale(parameters_sim, T, 1)$Z
   psi_sim <- compute_psi_simple(Y_sim$Y, X, parameters_sim$Z, parameters_sim, families)
 
+  # compute independenz Z for hessian:
+  Z <- scale(gen_Z(nrow(Y), ncol(parameters$A)), scale=F) # this prevents bias for computing the hessian: it is independent of the rest.
+  linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
+  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
+  H_sam   <- compute_psi_AB_hessian(ZX_join(Z, X), phi=parameters$phi, linpar_bprimeprime = linpar_bprimeprime, Miss = Miss)
+  # H_sam   <- lapply(H_sam, function(H) diag(diag(H)))
+
+
+
+  # AB <- (psi_sim$AB - psi_sam$AB)/nrow(Y)
   # compute the updates
   AB <- compute_hessian_x_psi(psi_sam$AB - psi_sim$AB, H_sam)
     # The above is equivalent to
-    # AB <- compute_hessian_x_psi((psi_sam$AB + parameters_sam$B - parameters$B) - (psi_sim$AB+parameters_sim$B - parameters$B), H_sam)
   AB <- AB_separate(AB, ncol(parameters$Z))
 
   psi_update <- list(
@@ -191,13 +200,14 @@ compute_psi_simple <- function(Y, X, Z, parameters, families, Miss, compute_hess
 
 compute_psi_simple_AB <- function(Y, Z, X) {
   ZX <- ZX_join(Z, X)
-  # AB <- log(t(Y+.1)) %*% ZX
+   # AB <- log(t(Y+.1)) %*% ZX
   # AB <- t(Y) %*% ZX
-  Y <- scale(Y, scale=F)
-  # AB <- t(Y) %*% ZX
-  A <- t(Y) %*% Z
-  B <- t(matrix(attr(Y, "scaled:center"), ncol=ncol(Y), nrow=nrow(Y), byrow=T)) %*% X # completely inefficient
-  AB <- cbind(A, B)
+  # Y <- scale(log(Y+.1), scale=F)
+  AB <- t(Y) %*% ZX
+  # Y <- scale(Y, scale=F)
+  # A <- t(Y) %*% Z
+  # B <- t(matrix(attr(Y, "scaled:center"), ncol=ncol(Y), nrow=nrow(Y), byrow=T)) %*% X # completely inefficient
+  # AB <- cbind(A, B)
   # AB <- t(scale(Y, scale=F)) %*% ZX
   # warning("RESCALING HERE LOSES INFORMATION FOR BETA -- THIS IS OBVIOUS FOR GAUSSIAN VARIABLE")
 
@@ -223,8 +233,8 @@ compute_psi_hessian <- function(Z, linpar_bprimeprime, phi){
 if(0) {
   devtools::load_all()
   set.seed(1234)
-  poisson  <- 10
-  gaussian <- 0
+  poisson  <- 0
+  gaussian <- 10
   binomial <- 0
   q <- 2
   k <- 1

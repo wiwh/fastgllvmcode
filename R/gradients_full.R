@@ -194,6 +194,7 @@ compute_psi_AB_hessian <- function (ZX, phi, linpar_bprimeprime, Miss) {
     linpar_bprimeprime[Miss] <- 0 # do at the parent lvl... this trick is OK, check NA.RMd
   }
   # compute a list of all hessians
+  # TODO if Z and X are standardized, this matrix is diagonal.
   sapply(1:length(phi), function(j) {
     -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/phi[j]
   }, simplify=F)

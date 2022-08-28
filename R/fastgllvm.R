@@ -419,10 +419,10 @@ if(0) {
     devtools::load_all()
     set.seed(1234)
     poisson  <- 0
-    gaussian <- 0
-    binomial <- 4
+    gaussian <- 500
+    binomial <- 0
     nobs <- 1000
-    q <- 1
+    q <- 5
     p <- poisson + gaussian + binomial
 
     intercept <- T
@@ -435,19 +435,27 @@ if(0) {
     # set.seed(123)
     # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     # plot(fit)
-    # ts.plot(fit$fit$hist$Z)
     set.seed(1304)
-    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=2, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="simple", median=.2)
+    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=1, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="simple", median=.2)
+    plot(fit.simple)
+    ts.plot(fit.simple$fit$hist$Z[,1:100], col=1:100)
 
+    plot(fg$parameters$phi[fg$families$id$gaussian], fit.simple$parameters$phi[fg$families$id$gaussian])
     history <- fit.simple$fit$hist
     check_convergence(history)
 
 
+    A <- fg$parameters$A * 0
+    A[fg$families$id$binomial,] <- 1
+    A.poisson.id <- which(A==1)
+    ts.plot(fit.simple$fit$hist$A[,A.poisson.id])
     plot(fit.simple)
     ts.plot(fit.simple$fit$hist$Z[,1:100])
 
     plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
     plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
+
+    plot(fg$parameters$Z, fit.simple$parameters$Z); abline(0,1,col=2)
 
 
     # LTM TEST
@@ -471,6 +479,7 @@ if(0) {
     plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
 
 
+    plot(fg$parameters$Z, fit.simple$parameters$Z)
 
     # GAUSSIAN TEST
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
