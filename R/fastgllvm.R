@@ -419,10 +419,10 @@ if(0) {
     devtools::load_all()
     set.seed(1234)
     poisson  <- 0
-    gaussian <- 500
-    binomial <- 0
-    nobs <- 1000
-    q <- 5
+    gaussian <- 0
+    binomial <- 4
+    nobs <- 100
+    q <- 1
     p <- poisson + gaussian + binomial
 
     intercept <- T

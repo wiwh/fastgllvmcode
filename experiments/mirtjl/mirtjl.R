@@ -1,8 +1,0 @@
-library(mirtjml)
-res <- mirtjml::mirtjml_expr(fg$Y, fg$dimensions$q, cc=1000, tol = 1e-2)
-res <- mirtjml::mirtjml_expr(fg$Y, fg$dimensions$q)
-plot(res$A_hat, fg$parameters$A); abline(0,1,col=2)
-zhat <- compute_zstar(fg$Y, res$A_hat, rep(1, fg$dimensions$p), res)
-plot(fg$parameters$A, res$A_hat)
-plot(fg$Z, res$theta_hat)
-abline(0,1,col=2); abline(0,-1,col=2)

@@ -1,7 +1,15 @@
 check_update_parameters <- function(parameters){
-  if (any(parameters$phi < 1e-4)) {
+  if (any(parameters$phi < 1e-2)) {
     warning("Parameter phi too small or negative, set to 1e-4 instead.")
-    parameters$phi[parameters$phi < 1e-1] <- 1e-1
+    parameters$phi[parameters$phi < 1e-2] <- 1e-2
+  }
+  if(any(abs(parameters$A) > 10)) {
+    parameters$A[parameters$A > 10] <- 10
+    parameters$A[parameters$A < -10] <- -10
+  }
+  if(!is.null(parameters$B) && any(abs(parameters$B) > 10)) {
+    parameters$B[parameters$B > 10] <- 10
+    parameters$B[parameters$B < -10] <- -10
   }
   # parameters <- recenter(parameters, 1) # DO NOT RESCALE! BIASES BINOMIAl p=4, q=1, n=10000
   # warning("recentered parameters")
