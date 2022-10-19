@@ -73,14 +73,6 @@ fastgllvm <- function(Y,
   )
 
   parameters <- initialize_parameters(parameters.init, dimensions, method=method)
-  # # TODO: this is useless at this stage...
-  # if (!is.null(parameters.init)) {
-  #   if(!is.list(parameters.init)) stop("The supplied 'parameters.init' must be a list.")
-  #   if (any(!(names(parameters.init) %in% c("A", "B", "phi", "covZ")))) stop("Unrecognized name of parameter in supplied 'parameters.init'.")
-  #   parameters <- parameters.init
-  # } else {
-  #   parameters <- initialize_parameters(parameters.init$A, parameters.init$B, parameters.init$phi, dimensions$p, dimensions$q, dimensions$k)
-  # }
   controls <- initialize_controls(controls)
 
   fg <- new_fastgllvm(Y, X, parameters, families, dimensions)
@@ -90,7 +82,7 @@ fastgllvm <- function(Y,
 
 }
 
-
+# The workhorse for fitting a gllvm model.
 fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, median=F) {
   # we store gradients and parameters in a list
   if (!is.null(parameters.init)) {
@@ -373,43 +365,41 @@ generate_parameters <- function(A, B, phi, p, q, k){
 
 
 #' Generate the families list as used in the other functions
+#' @param families: either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.
+#' @value families: a list of families
 generate_families <- function(family, p){
+  stopifnot(is.character(family))
+  if (!(length(family) %in% c(1,p))) stop("Length of the 'family' vector must be either 1 or p.")
+
   families <- list(
     objects = list(),
     id = list(),
     vec = vector(length=p)
   )
-  if (!is.list(family)) {
-    if(!is.vector(family)) stop("Supplied 'family' must be either a list or a vector.")
-    if(length(family) > 1) {
-      fam_unique <- unique(family)
-      for(i in 1:length(fam_unique)) {
-        family_obj <- get(fam_unique[i], mode = "function", envir = parent.frame())()
-        families$objects[[family_obj$family]] <- family_obj
-        families$id[[family_obj$family]] <- which(family==fam_unique[i])
-        if (is.null(family_obj$family)) {
-          stop("'family' not recognized")
-        }
-      }
-    } else {
-      family_obj <- get(family, mode = "function", envir = parent.frame())()
+
+  if(length(family) > 1) {
+    fam_unique <- unique(family)
+    for(i in 1:length(fam_unique)) {
+      family_obj <- get(fam_unique[i], mode = "function", envir = parent.frame())()
       families$objects[[family_obj$family]] <- family_obj
-      families$id[[family_obj$family]] <- 1:p
+      families$id[[family_obj$family]] <- which(family==fam_unique[i])
       if (is.null(family_obj$family)) {
         stop("'family' not recognized")
       }
     }
   } else {
-    # TODO: test that the user entered the family correctly
-    # families$id <- family
-    # families$objects <- lapply(names(families$id), function(family_name)
-    #   get(family_name, mode = "function", envir = parent.frame())())
-    # names(families$objects) <- names(families$id)
+    family_obj <- get(family, mode = "function", envir = parent.frame())()
+    families$objects[[family_obj$family]] <- family_obj
+    families$id[[family_obj$family]] <- 1:p
+    if (is.null(family_obj$family)) {
+      stop("'family' not recognized")
+    }
   }
 
   for (i in seq_along(families$id)) {
     families$vec[families$id[[i]]] <- rep(families$objects[[i]]$family, length(families$id[[i]]))
   }
+
   families
 }
 
