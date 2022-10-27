@@ -116,6 +116,8 @@ where (in a slight abuse of notation) the function $\text{sig}(v)$ applies $\tex
 To compute everything, we need the following additional functions, that are defined above.
 
 ```{r}
+sigmoid <- function(x) 1/(1+exp(-x))
+
 # b and c functions
 bfunc <- function(natpar){
   natpar - log(sigmoid(natpar))
@@ -322,11 +324,11 @@ p <- 8
 q <- 1
 n <- 1e5
 nN <- nD <- 5000
-par <- gen_par(p, q, family="bernoulli")
-par$A <- matrix(c(-2, -2, -1, -1, 1, 1, 2, 2), p, 1)
-gllvm <- gen_gllvm(n, p, q, family = "bernoulli", par=par)
+par <- generate_parameters(A = matrix(c(-2, -2, -1, -1, 1, 1, 2, 2), p, 1), B=NULL, phi=NULL, p=p, q=q, k=0)
+gllvm <- gen_fastgllvm(n, p, q, family = "binomial", A= par$A, intercept = F, k=0)
 Y <- gllvm$Y
-par <- gllvm$par
+par <- gllvm$parameters
+par$Psi <- par$phi
 scores_Y <- compute_scores_Y(Y, par, nD, nN, seed=42345)
 ```
 
