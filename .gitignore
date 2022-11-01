@@ -8,6 +8,7 @@
 # Data
 .Rdata
 .rda
+*.rds
 
 # User-specific files
 .Ruserdata

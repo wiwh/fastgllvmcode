@@ -1,3 +1,4 @@
+library(Matrix)
 
 # Computing zstar ---------------------
 
@@ -14,10 +15,9 @@
 #'   more robust, at the potential cost of computation speed.
 #' @param maxit: maximum iterations to compute zstar
 #' @param thres: threshold to stop the routine
+#' @param method: one of "newton", "quasinewton".
 
-#TODO: testthat: computes the same first step as glm starting at 0, for all family types.
-
-compute_zstar <- function(Y, A, phi, X, B, families, start=NULL, maxit=100, thresh=1e-3, save=F, Miss=NULL, verbose=F){
+compute_zstar <- function(Y, A, phi, X, B, families, start=NULL, maxit=100, thresh=1e-3, save=F, Miss=NULL, verbose=F, method = "newton"){
   if(is.null(B)) {
     XB <- NULL
   } else {
@@ -51,9 +51,9 @@ compute_zstar <- function(Y, A, phi, X, B, families, start=NULL, maxit=100, thre
       linpar[!conv,] <- compute_linpar(Zstar[!conv, , drop=F], A, XB=XB)$linpar
     }
 
-    Zstar[!conv, ] <- Zstar[!conv, , drop=F] - compute_zstar_Hneg_score(
+    Zstar[!conv, ] <- Zstar[!conv, , drop=F] - Z_update(
       compute_zstar_score(Zstar[!conv, , drop=F], Y[!conv, , drop=F], A, phi, linpar[!conv, , drop=F], families, Miss[!conv, , drop=F]),
-      compute_zstar_hessian(A, phi, linpar[!conv, , drop=F], families, Miss[!conv, , drop=F])
+      compute_zstar_hessian(A, phi, linpar[!conv, , drop=F], families, Miss[!conv, , drop=F], method=method)
     )
 
     if (save) hist[[i]] <- as.vector(Zstar)
@@ -66,6 +66,7 @@ compute_zstar <- function(Y, A, phi, X, B, families, start=NULL, maxit=100, thre
   if (save) hist <- do.call(rbind, hist)
   list(Zstar=Zstar, hist=hist, niter=i, converged=ifelse(i==maxit, F, T))
 }
+
 
 
 
@@ -86,7 +87,7 @@ compute_zstar_score <- function(Z, Y, A, phi, linpar, families, Miss) {
 }
 
 #TODO: we need A/phi here as well: it will never change for zstar.
-compute_zstar_hessian <- function(A, phi, linpar, families, Miss) {
+compute_zstar_hessian_old <- function(A, phi, linpar, families, Miss) {
   linpar_bprimeprime <- compute_linpar_bprimeprime(linpar, families)
 
   q <- ncol(A)
@@ -106,7 +107,41 @@ compute_zstar_hessian <- function(A, phi, linpar, families, Miss) {
   }
 }
 
-compute_zstar_Hneg_score <- function(score, hessian){
+#TODO: we need A/phi here as well: it will never change for zstar.
+compute_zstar_hessian <- function(A, phi, linpar, families, Miss, method="newton") {
+  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar, families)
+
+  q <- ncol(A)
+
+  if(!is.null(Miss)) {
+    # TODO: do this in parent! THIS IS WRONGEEEE
+    linpar_bprimeprime[Miss] <- 0
+  }
+
+  if (q == 1) {
+    - (t(t(linpar_bprimeprime)*(as.vector(A)/phi)) %*% A + 1)  # TODO: explain this vector trick
+  } else {
+  # TODO: this should be done with tensor products
+    if (method == "newton"){
+      lapply(1:nrow(linpar_bprimeprime), function(j) {
+        - (t(A) %*% (A * linpar_bprimeprime[j,] / phi) + diag(q))
+      })
+    } else if (method == "quasi"){
+      AA <- A * A # this can be kept in memory... its always the same.
+      H <- lapply(1:nrow(linpar_bprimeprime), function(j) {
+        - (colSums(AA * (linpar_bprimeprime[j,] / phi)) + 1)
+      })
+      do.call(rbind, H)
+
+    } else {
+      stop("method not found")
+    }
+  }
+}
+
+# Compute the update for Z, as the negative of the hessian times the score.
+# If the hessian is a vector (method == "newton"), the computations are made row-wise. Else they are done as an element-wise matrix multiplication (method=="quasi").
+Z_update <- function(score, hessian){
   if(is.list(hessian)) {
     t(sapply(seq_along(hessian), function(i){
       solve(hessian[[i]], score[i,]) #TODO: regularization should be added as an option
@@ -115,7 +150,6 @@ compute_zstar_Hneg_score <- function(score, hessian){
     score/hessian
   }
 }
-
 
 # not used anymore (should not be used here, but maybe in parent... A should be rescaled appropriately)
 scale_zstar <- function(Z){
@@ -130,7 +164,6 @@ scale_zstar <- function(Z){
 #' Good  starting values are used to speed up / robustify the convergence. They are computed
 #' by first transforming the response and then taking the OLS.
 compute_zstar_starting_values <- function(Y, A, XB, families, Miss) {
-
   if (length(families$id$poisson) > 0) {
     Y[, families$id$poisson] <- log(Y[, families$id$poisson] + 1e-3)
   }
@@ -171,11 +204,15 @@ compute_zstar_starting_values <- function(Y, A, XB, families, Miss) {
 if(0) {
   devtools::load_all()
   set.seed(1231)
-  fg <- gen_fastgllvm(nobs=1000, p=1000, q=5, family=c(rep("poisson", 0), rep("gaussian", 1000), rep("binomial",0)), k=10, intercept=F, miss.prob = 0.5)
+
+  fg <- gen_fastgllvm(nobs=1000, p=5000, q=5, family=c(rep("poisson", 5000), rep("gaussian", 0), rep("binomial", 0)), k=10, intercept=F, miss.prob = 0.5)
+
 
   # parameters.init <- compute_parameters_initial_values(fg, target=fg$parameters$A)
-  zhat <- compute_zstar(fg$Y, fg$parameters$A, fg$parameters$phi, fg$X, fg$parameters$B, fg$families, Miss=fg$Miss)
-  plot(fg$Z, zhat$Zstar); abline(0, 1, col=2)
+  zhat <- compute_zstar(fg$Y, fg$parameters$A, fg$parameters$phi, fg$X, fg$parameters$B, fg$families, Miss=fg$Miss, method="newton")
+  norm(fg$parameters$Z - zhat$Zstar)
+
+  plot(fg$parameters$Z, zhat$Zstar); abline(0, 1, col=2)
   # now we rescale.
 
   # zstart must be the same individual or vector

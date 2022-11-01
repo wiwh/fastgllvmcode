@@ -408,62 +408,50 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 0
+    poisson  <- 20
     gaussian <- 0
-    binomial <- 4
+    binomial <- 0
     nobs <- 100
-    q <- 1
+    q <- 2
     p <- poisson + gaussian + binomial
 
     intercept <- T
     k <- 1
     if(k==0 & intercept) k <- 1
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-    set.seed(1030)
+    set.seed(10030)
     fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
     # check initialization
     # set.seed(123)
     # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     # plot(fit)
     set.seed(1304)
-    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=1, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="simple", median=.2)
+    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.2)
+    # set.seed(1304)
+    # fit.full <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=500, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="full", median=.2)
+
     plot(fit.simple)
-    ts.plot(fit.simple$fit$hist$Z[,1:100], col=1:100)
+    # plot(fit.full)
+    plot(fit.simple$fit$controls$learning_rate(1:200))
 
-    plot(fg$parameters$phi[fg$families$id$gaussian], fit.simple$parameters$phi[fg$families$id$gaussian])
-    history <- fit.simple$fit$hist
-    check_convergence(history)
-
-
-    A <- fg$parameters$A * 0
-    A[fg$families$id$binomial,] <- 1
-    A.poisson.id <- which(A==1)
-    ts.plot(fit.simple$fit$hist$A[,A.poisson.id])
-    plot(fit.simple)
-    ts.plot(fit.simple$fit$hist$Z[,1:100])
-
-    plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
-    plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
-
-    plot(fg$parameters$Z, fit.simple$parameters$Z); abline(0,1,col=2)
-
-
+    plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
+    points(fg$parameters$B, fit.simple$parameters$B, pch=2, col=3)
     # LTM TEST
     library(ltm)
     if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
     if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
-    plot(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings)#, xlim=c(-5,5), ylim=c(-5,5))
+
+    points(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings)#, xlim=c(-5,5), ylim=c(-5,5))
     points(fg$parameters$B, fit.ltm$coefficients[,1], pch=2)
-    # points(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=2)
-    # points(fg$parameters$B, fit$parameters$B, pch=2, col=2)
-    points(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings, col=3)
-    points(fg$parameters$B, fit.simple$parameters$B, pch=2, col=3)
+    # points(fg$parameters$A, psych::Procrustes(fit.full$parameters$A, fg$parameters$A)$loadings, col=2)
+    # points(fg$parameters$B, fit.full$parameters$B, pch=2, col=2)
     legend(x="bottomright",pch=1,  legend=c("ltm","full", "simple"), col=1:3)
     abline(0,1,col=2)
     abline(0,-1,col=2)
     compute_error(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)
     # compute_error(fit$parameters$A, fg$parameters$A, rotate=T)
     compute_error(fit.simple$parameters$A, fg$parameters$A, rotate=T)
+    # compute_error(fit.full$parameters$A, fg$parameters$A, rotate=T)
 
     plot(fg$parameters$A, psych::Procrustes(fit.simple$parameters$A, fg$parameters$A)$loadings);abline(0,1,col=2)
     plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)

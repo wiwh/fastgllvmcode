@@ -438,6 +438,8 @@ B <- variance_scores(Y, par, nE)
 Aneg <- solve(A)
 Avar <- Aneg %*% B %*% t(Aneg)
 ```
+
+
 ## Computing the Relative Efficiency
 We can now  compute the relative efficiency as the following ratio:
 
