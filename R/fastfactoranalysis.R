@@ -49,14 +49,6 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
     Z <- Zdat$Z
     A <- ffa_est_A(Y, Z, covZ=Zdat$covZ, covZ.neg = Zdat$covZ.neg, Miss)
 
-    # in one go
-    # browser()
-    # K <- ffa_comp_K(A, Psi)
-    # KSK <- t(K) %*% (A %*% t(A) + diag(Psi)) %*% K
-    # KYK <- t(K) %*% ((t(Y) %*% Y)/nrow(Y)) %*% K
-    #
-    # A2 <- (t(Y)%*% Y/nrow(Y)) %*% K %*% solve(chol(KYK)) %*% chol(KSK))
-
     if(iteratively_update_Psi) Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
 
     if (savepath) {
@@ -191,15 +183,14 @@ ffa_error <- function(A, target, rotate=F){
 }
 
 if(0){
-  n <- 10000
-  p <- 1000
+  n <- 1000
+  p <- 100
   q <- 10
 
   dat <- ffa_gen_Y(n, p, q)
 
-
   Y <- dat$Y
-  Y[runif(prod(dim(Y)))<.3] <- NA
+  Y[runif(prod(dim(Y)))<.5] <- NA
   fit <- ffa(Y, q, savepath = T, verbose=T, maxiter=5, eps=1e-5, iteratively_update_Psi = 2)
 
   ts.plot(fit$path$A[,1:100])

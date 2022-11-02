@@ -1,9 +1,11 @@
 #' Fit a fastgllvm
 #' @param Y: a `n` times `p` matrix of observations
 #' @param q: the number of factors
-#' @param family: specifies the family. See below for more information.
+#' @param family: specifies the families. See below for more information.
 #' @param X: either `NULL` or a `n` timeis `k` matrix of covariates.
 #' @param intercept: a boolean (default:TRUE) indicating whether an intercept should be included in the model. If `X` is supplied and an intercept is desired, the first column of `X` must be a vector of ones to model the intercept.
+#' @param gradient_function: one of: "simple", "full", or a user-defined function.
+#' @param parameters.init: a list containing "A", "B", and "phi".
 #' @description
 #'
 #' @details
@@ -43,10 +45,11 @@ fastgllvm <- function(Y,
                       Z.init = NULL,
                       parameters.init=NULL,
                       controls=list(),
-                      method="full",
+                      method="simple",
                       verbose = F,
                       hist = T,
-                      median= F) {
+                      median= F,
+                      batch_size=nrow(Y)) {
 
   stopifnot(is.matrix(Y))
 
@@ -72,34 +75,121 @@ fastgllvm <- function(Y,
     k = k
   )
 
-  parameters <- initialize_parameters(parameters.init, dimensions, method=method)
   controls <- initialize_controls(controls)
+  controls$batch_size = batch_size
 
-  fg <- new_fastgllvm(Y, X, parameters, families, dimensions)
-  fg$method <- method
-  fg$intercept <- intercept
-  fastgllvm.fit(fg, controls, verbose, hist, median=median)
-
-}
-
-# The workhorse for fitting a gllvm model.
-fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, median=F) {
-  # we store gradients and parameters in a list
-  if (!is.null(parameters.init)) {
-    parameters <- parameters.init
-  } else {
-    parameters <- compute_parameters_initial_values(fg, rescale=F)
+  # get mising values
+  Miss <- is.na(Y)
+  if (!any(Miss)) {
+    Miss <- NULL
   }
 
-  gradients <-  initialize_gradients(parameters, method=fg$method)
+  fg <- new_fastgllvm(Y, X, parameters.init, families, dimensions, Miss)
 
-  # One may define other functions to compute gradients
-  if(fg$method == "full") compute_gradients <- compute_gradients_full
-  if(fg$method == "simple") compute_gradients <- compute_gradients_simple
-  if(fg$method == "rescale") compute_gradients <- compute_gradients_simple_rescale
+  fastgllvm.fit(fg, method=method, parameters.init=parameters.init, controls=controls, verbose=verbose, hist=hist, median=median)
+}
+
+# Constructor
+# -----------
+
+#' Generates a fastgllvm object
+#'
+#' @param A the matrix of loadings.
+#' @param B the matrix of fixed effect coefficients, of dimensions p * k
+#' @param phi a vector of scale parameters.
+#' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
+#'
+#' @return a list corresponding to the model
+new_fastgllvm <- function(Y, X, parameters, families, dimensions, Miss, fit=list()) {
+  fastgllvm <- structure(
+    list(Y=Y,
+         X=X,
+         parameters=parameters,
+         families=families,
+         dimensions=dimensions,
+         Miss=Miss,
+         fit=fit),
+    class="fastgllvm")
+
+  validate_fastgllvm(fastgllvm)
+
+  fastgllvm
+}
 
 
-  zstar <- compute_zstar(fg$Y, parameters$A, parameters$phi, fg$X, parameters$B, fg$families)$Zstar
+
+
+validate_fastgllvm <- function(fastgllvm) {
+  with(fastgllvm, {
+    stopifnot(is.matrix(Y))
+    #' Check whether the parameters are correctly specified
+    if(!is.null(parameters)) {
+      stopifnot(is.matrix(parameters$A))
+      stopifnot(all(dim(parameters$A) == c(dimensions$p, dimensions$q)))
+
+      if (!is.vector(parameters$phi) || length(parameters$phi) != dimensions$p) {
+        stop("phi must be a vector of length p.")
+      }
+    }
+
+    if(!is.null(parameters$B)) {
+      stopifnot(is.matrix(parameters$B))
+      stopifnot(is.matrix(X))
+      if(ncol(X) != ncol(parameters$B)) stop("Dimension mismatch between X and B.")
+    }
+
+    stopifnot(is.list(fit))
+
+
+    if (dimensions$q >= dimensions$p) {
+      stop("The number of latent variables (q) must be strictly smaller than the number of observed variables (p).")
+    }
+
+    # check that the families have been correctly specified
+    if(!all(sort(as.vector(do.call(c, families$id))) == 1:dimensions$p)) {
+      stop("Family incorrectly specified: check the indices.")
+    }
+
+    if (!is.null(Miss)) {
+      if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
+      if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
+    }
+
+  })
+}
+
+
+
+
+
+#' Fit a fastgllvm object for fitting a gllvm model.
+#'
+fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, verbose=F, hist=F, median=F) {
+
+  if(is.null(fg$parameters)) {
+    fg$parameters <- initialize_parameters(fg$Y, fg$X, fg$dimensions, fg$families)
+  } else {
+    cat("\nInitial parameters values set to those provided.")
+  }
+
+  gradient <- initialize_gradient(fg$parameters, method=method)
+  compute_gradient <- get_compute_gradient(method = method)
+
+  batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
+
+  # compute criterion everything after each pass...
+  browser()
+  k <- 1
+
+  for (k in seq_along(batches)) {
+
+  }
+
+  Y <- fg$Y[batches[[k]],,drop=F]
+  X <- fg$X[batches[[k]],,drop=F]
+  Z <- fg$parameters$Z[batches[[k]],,drop=F]
+
+  zstar <- compute_Z(Y, X, fg$parameters, fg$families, start=Z)
   params_hist <- list()
   if(hist) params_hist <- c(params_hist, list(parameters))
 
@@ -153,89 +243,6 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, med
   fg
 }
 
-# Constructor
-# -----------
-
-#' Generates a fastgllvm object
-#'
-#' @param A the matrix of loadings.
-#' @param B the matrix of fixed effect coefficients, of dimensions p * k
-#' @param phi a vector of scale parameters.
-#' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
-#'
-#' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, parameters, families, dimensions, linpar=NULL, fit=list(), Miss=NULL) {
-  stopifnot(is.matrix(Y))
-  if(!is.null(parameters$B)) {
-    stopifnot(is.matrix(parameters$B))
-    stopifnot(is.matrix(X))
-    if(ncol(X) != ncol(parameters$B)) stop("Dimension mismatch between X and B.")
-  }
-
-
-  if (is.null(parameters)) {
-    parameters <- list()
-    parameters$A <- matrix(0, dimensions$p, dimensions$q)
-    if (dimensions$k > 0) {
-      parameters$B <- matrix(0, dimensions$p, dimensions$k)
-    } else {
-      parameters$B <- NULL
-    }
-    parameters$phi <- rep(1, dimensions$p)
-  }
-
-
-  stopifnot(is.matrix(parameters$A))
-  stopifnot(is.vector(parameters$phi))
-  stopifnot(is.list(fit))
-
-  if (dimensions$q >= dimensions$p) {
-    stop("The number of latent variables (q) must be strictly smaller than the number of observed variables (p).")
-  }
-  if (!is.vector(parameters$phi) || length(parameters$phi) != dimensions$p) {
-    stop("phi must be a vector of length p.")
-  }
-
-  # check that the families have been correctly specified
-  if(!all(sort(as.vector(do.call(c, families$id))) == 1:dimensions$p)) {
-    stop("Family incorrectly specified: check the indices.")
-  }
-
-  if (is.null(Miss)) {
-    Miss <- is.na(Y)
-    if (!any(Miss)) {
-      Miss <- NULL
-    }
-  }
-
-  if (!is.null(Miss)) {
-    if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
-    if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
-  }
-
-  fastgllvm <- structure(
-    list(Y=Y,
-         X=X,
-         parameters=parameters,
-         families=families,
-         dimensions=dimensions,
-         fit=fit,
-         Miss=Miss),
-    class="fastgllvm")
-  fastgllvm
-}
-
-
-# validate a fastgllvm object
-# TODO: families$id must total n!!!
-validate_fastgllvm <- function(fastgllvm){
-
-  # TODO: check that iff intercept is true, then X[,1] is full of ones.
-  # TODO: check that controls have the required stuff... or do that at control
-  # TODO: test that the Miss matrix has no row with all ones...
-  with(fastgllvm, {
-  })
-}
 
 #' Generates a GLLVM model.
 #'
@@ -319,7 +326,6 @@ gen_fastgllvm <- function(nobs=100,
     parameters=parameters,
     families=families,
     dimensions=dimensions,
-    linpar=linpar,
     Miss = Miss
   )
 
@@ -408,11 +414,11 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 20
+    poisson  <- 0
     gaussian <- 0
-    binomial <- 0
+    binomial <- 4
     nobs <- 100
-    q <- 2
+    q <- 1
     p <- poisson + gaussian + binomial
 
     intercept <- T
@@ -426,7 +432,7 @@ if(0) {
     # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     # plot(fit)
     set.seed(1304)
-    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.2)
+    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.5, batch_size=12)
     # set.seed(1304)
     # fit.full <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=500, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="full", median=.2)
 

@@ -19,60 +19,6 @@ initialize_parameters_simple <- function(parameters, dimensions) {
 initialize_gradients_simple <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
-#
-# compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
-#   if(!is.null(parameters$B) && all(X[,1]==1)) rescale.B=1 else rescale.B=FALSE
-#   # recenter Z and B
-#   parameters_sim <- parameters_sam <- parameters
-#
-#   # Generate sim
-#   Y_sim <- generate_y(
-#     linpar = NULL,
-#     phi = parameters$phi,
-#     families = families,
-#     A = parameters$A,
-#     B = parameters$B,
-#     X = X,
-#     Z = NULL,
-#     nobs = nrow(Y)
-#   )
-#
-#   # Compute psi for sam
-#   parameters_sam$Z <- compute_zstar(Y, parameters_sam$A, parameters_sam$phi, X, parameters_sam$B, families, start=parameters_sam$Z, Miss=Miss)$Zstar
-#   parameters_sam <- recenter(parameters_sam, intercept.id=1)
-#   psi_sam <- compute_psi_simple(Y, X, parameters_sam$Z, parameters_sam, families)
-#   linpar <- compute_linpar(parameters_sam$Z, parameters_sam$A, X, parameters_sam$B)
-#   linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-#   H_sam   <- compute_psi_AB_hessian(ZX_join(parameters_sam$Z, X), phi=parameters_sam$phi, linpar_bprimeprime = linpar_bprimeprime, Miss = Miss)
-#   H_sam <- lapply(H_sam, function(Hj)diag(diag(Hj)))
-#   # Compute psi for sim
-#   parameters_sim$Z <- compute_zstar(Y_sim$Y, parameters_sim$A, parameters_sim$phi, X, parameters_sim$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-#   paraeters_sim <- recenter(parameters_sim, intercept.id=1)
-#   psi_sim <- compute_psi_simple(Y_sim$Y, X, parameters_sim$Z, parameters_sim, families)
-#
-#   # compute the updates
-#   psi_update <- psi_sam$AB - psi_sim$AB
-#   # Modify the B
-#   psi_update[, (ncol(parameters$A)+1):ncol(psi_update)]  <- psi_update[, (ncol(parameters$A)+1):ncol(psi_update)] + (parameters_sam$B - parameters_sim$B)
-#
-#   # Multiply by the hessian
-#
-#   AB <- compute_hessian_x_psi(psi_update, H_sam)
-#   # The above is equivalent to
-#   # AB <- compute_hessian_x_psi((psi_sam$AB + parameters_sam$B - parameters$B) - (psi_sim$AB+parameters_sim$B - parameters$B), H_sam)
-#   AB <- AB_separate(AB, ncol(parameters$Z))
-#
-#   psi_update <- list(
-#     A = AB$A,
-#     B = AB$B,
-#     phi = parameters$phi - psi_sam$phi,
-#     Z = 0.1*(parameters$Z - parameters_sam$Z)
-#   )
-#
-#   psi_update
-# }
-#
-#
 
 compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
   parameters_sim <- parameters_sam <- parameters
@@ -90,12 +36,12 @@ compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
   )
 
   # Compute psi for sam
-  parameters_sam$Z <- scale(compute_zstar(Y, parameters_sam$A, parameters_sam$phi, X, parameters_sam$B, families, start=parameters_sam$Z, Miss=Miss)$Zstar, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
+  parameters_sam$Z <- scale(compute_Z(Y, X, parameters_sam, families, start=parameters_sam$Z)$Z, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
   # parameters_sam$Z <- rescale(parameters_sam, T, 1)$Z
   psi_sam <- compute_psi_simple(Y, X, parameters_sam$Z, parameters_sam, families)
 
   # Compute psi for sim
-  parameters_sim$Z <- scale(compute_zstar(Y_sim$Y, parameters_sim$A, parameters_sim$phi, X, parameters_sim$B, families, start=Y_sim$Z, Miss=Miss)$Zstar, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
+  parameters_sim$Z <- scale(compute_Z(Y, X, parameters_sim, families, start=Y_sim$Z)$Z, scale=F, center=T) # DO NOT RESCALE SCALE, CENTER IS OK
   # parameters_sim$Z <- rescale(parameters_sim, T, 1)$Z
   psi_sim <- compute_psi_simple(Y_sim$Y, X, parameters_sim$Z, parameters_sim, families)
 
@@ -125,52 +71,6 @@ compute_gradients_simple <- function(Y, X, parameters, families, Miss, ...) {
 
   psi_update
 }
-
-
-# compute_gradients_simple_rescale <- function(Y, X, parameters, families, Miss, ...) {
-#   if(!is.null(parameters$B) && all(X[,1]==1)) rescale.B=1 else rescale.B=FALSE
-#   # parameters_sim <- parameters_sam <- recenter(parameters, 1)
-#   parameters_sim <- parameters_sam <- parameters
-#   # Generate sim
-#   Y_sim <- generate_y(
-#     linpar = NULL,
-#     phi = parameters$phi,
-#     families = families,
-#     A = parameters$A,
-#     B = parameters$B,
-#     X = X,
-#     Z = NULL,
-#     nobs = nrow(Y)
-#   )
-#
-#   # Compute psi for sam
-#   Znext <- parameters_sam$Z <- compute_zstar(Y, parameters$A, parameters$phi, X, parameters$B, families, start=parameters$Z, Miss=Miss)$Zstar
-#   parameters_sam <- rescale(parameters_sam, rescale.A=T, rescale.B=F)
-#   psi_sam <- compute_psi_simple(Y, X, parameters_sam$Z, parameters_sam, families)
-#   linpar <- compute_linpar(parameters_sam$Z, parameters_sam$A, X, parameters_sam$B)
-#   linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-#   H_sam   <- compute_psi_AB_hessian(ZX_join(parameters_sam$Z, X), phi=parameters_sam$phi, linpar_bprimeprime = linpar_bprimeprime, Miss = Miss)
-#   # Compute psi for sim
-#   parameters_sim$Z <- compute_zstar(Y_sim$Y, parameters_sim$A, parameters_sim$phi, X, parameters_sim$B, families, start=Y_sim$Z, Miss=Miss)$Zstar
-#   parameters_sim <- rescale(parameters_sim, rescale.A=T, rescale.B=F)
-#   psi_sim <- compute_psi_simple(Y_sim$Y, X, parameters_sim$Z, parameters_sim, families)
-#
-#   # compute the updates
-#   AB_update <- compute_hessian_x_psi(psi_sam$AB - psi_sim$AB, H_sam)
-#   AB_update <- AB_separate(AB_update, ncol(parameters_sam$Z))
-#
-#   psi_update <- list(
-#     A = AB_update$A,
-#     B = AB_update$B,
-#     # A = parameters_sam$A - parameters_sim$A + AB$A,
-#     # B = parameters_sam$B - parameters_sim$B + AB$B,
-#     phi = psi_sam$phi - psi_sim$phi,
-#     Z = parameters$Z - Znext
-#   )
-#
-#   psi_update
-# }
-
 
 # returns the (simple) psi functions for A, B, phi
 compute_psi_simple <- function(Y, X, Z, parameters, families, Miss, compute_hessian = T) {
@@ -280,11 +180,11 @@ if(0) {
   fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, phi=3*(1:p)/p, k=1, intercept=T, miss.prob = 0, scale=1)
 
   param1 <- fg$parameters
-  param1$Z <- with(param1, compute_zstar(fg$Y, A, phi, fg$X, B, fg$families, start=Z)$Zstar)
+  param1$Z <- with(param1, compute_Z(fg$Y, fg$X, fg$parameters, start=fg$parameters$Z)$Z)
 
   param2 <- fg$parameters
   param2$B <- param2$B +
-  param2$Z <- with(param2, compute_zstar(fg$Y, A, phi, fg$X, B, fg$families, start=Z)$Zstar)
+  param2$Z <- with(param2, compute_Z(fg$Y, fg$X, fg$parameteres, start=fg$parameters$Z)$Z)
 
   plot(param1$Z, param2$Z); abline(0,1)
 
