@@ -3,14 +3,14 @@ initialize_parameters_simple <- function(parameters, dimensions) {
     if (is.null(parameters$A)) parameters$A <- matrix(0, p, q)
     if (is.null(parameters$B)) parameters$B <- matrix(0, p, k)
     if (is.null(parameters$phi)) parameters$phi <- rep(1, p)
-    if (is.null(parameters$Z)) parameters$Z <- matrix(0, n, q)
+    # if (is.null(Z)) Z <- matrix(0, n, q)
     if (is.null(parameters$covZ)) parameters$covZ <- diag(q)
 
     # Control parameters
     stopifnot(is.matrix(parameters$A) && dim(parameters$A) == c(p, q))
     stopifnot(is.matrix(parameters$B) && dim(parameters$B) == c(p, k))
     stopifnot(is.vector(parameters$phi) && length(parameters$phi) == p)
-    stopifnot(is.matrix(parameters$Z) && dim(parameters$Z) == c(n, q))
+    # stopifnot(is.matrix(Z) && dim(Z) == c(n, q))
     stopifnot(is.matrix(parameters$covZ) && dim(parameters$covZ) == c(q,q))
     parameters
   })
@@ -21,16 +21,50 @@ initialize_gradients_simple <- function(parameters) {
 }
 
 compute_gradients_simple <- function(fg) {
+  fg_simulated <- fg_old <- fg <- subset(fg, batch)
+
+  # Update main values and compute gradient of the sample
+
+  gradients_sample <- list()
+
+  comp_Z <- compute_Z(fg, maxit=10) # TODO: maybe reduce to 1?
+  fg$Z <- comp_Z$Z
+  fg$linpar <- fg$linpar[batch,] <- with(fg, compute_linpar(
+    Z, parameters$A , X , parameters$B))$linpar
+  # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
+  fg$mean <- fg$mean[batch,] <- compute_linpar_bprime(fg$linpar, fg$families)
+
+  gradients_sample$AB <- compute_gradients_simple_AB(fg)
+
+
+  # Compute gradient on a simulated sample
+  fg_simulated <- simulate(fg, return_fastgllvm=T)
+  fg_simulated$Z <- compute_Z(fg_simulated, maxit=10)$Z
+  gradients_simulated <- compute_gradients(fg_simulated)
+
+  phi <- compute_psi_simple_phi(Y, parameters, families)
+  gradients <- mult_grad_Hessian_AB(gradients_sample$AB - gradients_simulated$AB, fg$hessian)
+
+  # TODO: compare to the old one below, they need to get the same thing!!
+
+}
+
+
+compute_gradients_simple_AB <- function(fg) {
   # for AB
   with(fg, {
     if (is.null(parameters$B)) {
-      AB <- t(Y) %*% parameters$Z
+      AB <- t(Y) %*% Z
     } else {
-      AB <- t(Y) %*% cbind(parameters$Z, X)
+      AB <- t(Y) %*% cbind(Z, X)
     }
-    phi <- compute_psi_simple_phi(Y, parameters, families)
+    phi <-
     list(AB=AB, phi=phi)
   })
+}
+
+compute_gradients_simple_phi <- function(fg) {
+
 }
 
 
@@ -72,7 +106,7 @@ compute_gradients_simple_old <- function(Y, X, parameters, families,  ...) {
   # compute the updates
   AB <- compute_hessian_x_psi(psi_sam$AB - psi_sim$AB, H_sam)
     # The above is equivalent to
-  AB <- AB_separate(AB, ncol(parameters$Z))
+  AB <- AB_separate(AB, ncol(Z))
 
   psi_update <- list(
     A = AB$A,
@@ -80,7 +114,7 @@ compute_gradients_simple_old <- function(Y, X, parameters, families,  ...) {
     B = AB$B,
     phi = psi_sim$phi - psi_sam$phi,
     # phi = parameters$phi - psi_sam$phi,
-    Z = parameters$Z - parameters_sam$Z
+    Z = Z - parameters_sam$Z
   )
 
   psi_update
@@ -114,7 +148,7 @@ if(0) {
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(1030)
   fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
-  psi <- compute_psi_simple(fg$Y, fg$X, fg$parameters$Z, fg$parameters, fg$families)
+  psi <- compute_psi_simple(fg$Y, fg$X, fg$Z, fg$parameters, fg$families)
   gradient <- compute_gradients_simple(fg$Y, fg$X, fg$parameters, fg$families)
 
   # this must have expectaiton 0 under the true model. check this

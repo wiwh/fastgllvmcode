@@ -332,9 +332,9 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 100
-    gaussian <- 100
-    binomial <- 100
+    poisson  <- 1000
+    gaussian <- 1000
+    binomial <- 1000
     nobs <- 100
     q <- 5
     p <- poisson + gaussian + binomial

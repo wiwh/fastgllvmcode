@@ -6,7 +6,6 @@ initialize_additional_parameters <- function(fg, method) {
   }
   if (method == "simple") {
   }
-  fg$parameters$hessian <- Matrix::Diagonal(fg$dimensions$p*fg$dimensions$q)*.01
   fg$parameters
 }
 

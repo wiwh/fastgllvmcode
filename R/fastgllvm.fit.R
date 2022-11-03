@@ -11,48 +11,43 @@ fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, ver
                           phi = initial_values$phi)
     rm("initial_values")
     fg$parameters <- initialize_additional_parameters(fg, method)
-
+    fg$hessian <- initialize_hessian_AB(fg)
   } else {
     cat("\nInitial parameters values set to those provided.")
   }
 
   fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
 
-  gradients <- initialize_gradients(fg$parameters)
   compute_gradients <- get_compute_gradients(method = method)
 
+  gradients <- initialize_gradients(fg$parameters)
+  hessian   <- initialize_gradients(fg$hessian)
 
-  batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
+
+
+  # Beginning of the iterations
+  # ---------------------------
 
   # impute for Y
   if(!is.null(fg$Miss)) {
     fg$Y[fg$Miss] <- fg$mean[fg$Miss]
   }
 
-
   # compute criterion after each pass...
+  # only update the hessian once per pass...
   # TODO: compute_Z must accept linpar as argument! for starting values or whatever
 
+  # Compute the Hessian
+  fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
+
+  # re-draw random batches every pass
+  batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
   for (batch in batches) {
-    browser()
+    compute_gradients(subset(fg, batch))
+    # by the (inverse of ) Hessian
 
-    fgk_simulated <- fgk_old <- fgk <- subset(fg, batch)
-
-    # Update main values and compute gradient of the sample
-    fgk$Z <- compute_Z(fgk, maxit=1)$Z
-    fgk$linpar <- fg$linpar[batch,] <- with(fgk, compute_linpar(
-      Z, parameters$A , X , parameters$B))$linpar
-    fgk$mean <- fg$mean[batch,] <- compute_linpar_bprime(fgk$linpar, fgk$families)
-    gradients_sample <- compute_gradients(fgk)
-
-    # Compute gradient on a simulated sample
-    fgk_simulated <- simulate(fgk, return_fastgllvm=T)
-    fgk_simulated$Z <- compute_Z(fgk_simulated, maxit=6)$Z
-    gradients_simulated <- compute_gradients(fgk_simulated)
-
-    # Compute the Hessian
-    # TODO
   }
+
 
 
   zstar <- compute_Z(Y, X, fg$parameters, fg$families, start=Z)
@@ -113,9 +108,9 @@ fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, ver
 if(0) {
   devtools::load_all()
   set.seed(1234)
-  poisson  <- 100
-  gaussian <- 100
-  binomial <- 100
+  poisson  <- 10
+  gaussian <- 10
+  binomial <- 10
   nobs <- 100
   q <- 2
   p <- poisson + gaussian + binomial

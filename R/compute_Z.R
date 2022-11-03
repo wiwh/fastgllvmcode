@@ -37,7 +37,7 @@ compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, v
       crit <- rep(Inf, nrow(Y))
 
       # Initialize the linear parameter
-      linpar <- matrix(NA, nrow(Y), ncol(Y))
+      linpar <- linpar_bprime <- matrix(NA, nrow(Y), ncol(Y))
 
 
       Z.old <- Z
@@ -50,8 +50,10 @@ compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, v
           linpar[!conv,] <- compute_linpar(Z[!conv, , drop=F], A, XB=XB)$linpar
         }
 
+        linpar_bprime[!conv,] <- compute_linpar_bprime(linpar[!conv,,drop=F], families)
+
         Z[!conv, ] <- Z[!conv, , drop=F] - Z_update(
-          compute_Z_score(Z[!conv, , drop=F], Y[!conv, , drop=F], A, phi, linpar[!conv, , drop=F], families, lambda=lambda),
+          compute_Z_score(Z[!conv, , drop=F], Y[!conv, , drop=F], A, phi, linpar_bprime[!conv, , drop=F], families, lambda=lambda),
           compute_Z_hessian(A, phi, linpar[!conv, , drop=F], families, lambda=lambda)
         )
 
@@ -63,7 +65,7 @@ compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, v
         if (all(conv)) break()
       }
       if (save) hist <- do.call(rbind, hist)
-      list(Z=Z, hist=hist, niter=i, converged=ifelse(i==maxit, F, T))
+      list(Z=Z, linpar=linpar, linpar_bprime=linpar_bprime, hist=hist, niter=i, converged=ifelse(i==maxit, F, T))
     })
   })
 }
@@ -71,9 +73,7 @@ compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, v
 
 
 
-compute_Z_score <- function(Z, Y, A, phi, linpar, families, lambda) {
-  linpar_bprime <- compute_linpar_bprime(linpar, families)
-
+compute_Z_score <- function(Z, Y, A, phi, linpar_bprime, families, lambda) {
   # For justification of this computation, check the Rmd file "NA".
   # We simply ignore the missing values in the score: careful the Hessian
   # needs to have the same simplification, lest the scores be divided by the wrong quantity:
@@ -148,15 +148,21 @@ compute_Z_starting_values <- function(Y, A, XB, families) {
 
 if(0) {
   devtools::load_all()
-  set.seed(1231)
+  set.seed(1234)
+  poisson  <- 100
+  gaussian <- 100
+  binomial <- 100
+  nobs <- 100
+  q <- 2
+  p <- poisson + gaussian + binomial
 
-  poisson <- 500
-  gaussian <- 2000
-  binomial <- 344
-  q <- 4
-
-  fg <- gen_fastgllvm(nobs=10, p=poisson + gaussian + binomial, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F)
+  intercept <- T
+  k <- 1
+  if(k==0 & intercept) k <- 1
+  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
+  set.seed(10030)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
   zhat <- compute_Z(fg, start=fg$parameters$Z, lambda=1)
 
-  plot(fg$parameters$Z, zhat$Z, xlim=c(-3,3), ylim=c(-3,3)); abline(0, 1, col=2)
+  plot(fg$Z, zhat$Z, xlim=c(-3,3), ylim=c(-3,3)); abline(0, 1, col=2)
 }
