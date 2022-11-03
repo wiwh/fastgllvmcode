@@ -2,15 +2,18 @@
 % Please edit documentation in R/fastgllvm.R
 \name{fastgllvm.fit}
 \alias{fastgllvm.fit}
-\title{Workhorse function to fit a fastgllvm model}
+\title{Fit a fastgllvm object for fitting a gllvm model.}
 \usage{
-fastgllvm.fit(fg, controls, verbose, hist, parameters.init = NULL)
-}
-\arguments{
-\item{fg:}{an object of type "fastgllvm"}
-
-\item{controls:}{a list of parameters controlling the fitting process}
+fastgllvm.fit(
+  fg,
+  method,
+  parameters.init = NULL,
+  controls = NULL,
+  verbose = F,
+  hist = F,
+  median = F
+)
 }
 \description{
-Workhorse function to fit a fastgllvm model
+Fit a fastgllvm object for fitting a gllvm model.
 }

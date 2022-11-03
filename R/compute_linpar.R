@@ -2,16 +2,14 @@
 #'
 #' @inheritParams compute_psi
 compute_linpar <- function(Z, A, X, B=NULL, XB=NULL) {
-  if (is.null(B) & is.null(XB)) {
     ZA <- Z %*% t(A)
-    linpar <- ZA
+  if (is.null(B) & is.null(XB)) {
+    linpar <- ZA + XB
   } else {
     if(is.null(XB)) XB <- X %*% t(B)
-    ZA <- Z %*% t(A)
-    linpar <- Z %*% t(A) + XB
+    linpar <- ZA + XB
   }
-  linpar_list <- list(linpar=linpar, XB=XB, ZA=ZA)
-  linpar_list
+  list(linpar=linpar, XB=XB, ZA=ZA)
 }
 
 compute_linpar_bprime <- function(linpar, families) {

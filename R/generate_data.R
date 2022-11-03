@@ -35,33 +35,29 @@ gen_binom_fast <- function(linpar, size, nobs, p){ # GEN BINOM FAST!
 #' Generates responses from a gllvm, given all parameters and values
 #'
 #' Returns a matrix Y
-#' @param A: loadings
-#' @param B: beta
-#' @param phi: scale parameters
-#' @param Z: nobs x q matrix of latent variables
-#' @param X: nobs x k design matrix
-#' @return a list corresponding to the model
-generate_y <- function(linpar, phi, families, A=NULL, B=NULL, X=NULL, Z=NULL, nobs=NULL, Miss=NULL) {
+#' @inheritParams fastgllvm
+#' @return a list of generated values
+gen_Y <- function(Z, X, parameters, families, linpar=NULL, XB=NULL) {
+  # compute linpar based on the provided information
   if (is.null(linpar)) {
     if(is.null(Z)) {
-      Z <- gen_Z(nobs, ncol(A))
+      Z <- gen_Z(nrow(X), ncol(parameters$A))
     }
-    linpar <- compute_linpar(Z, A, X, B)
+    linpar <- compute_linpar(Z, parameters$A, X, parameters$B, XB)
   }
   Y <- matrix(NA,nrow(linpar$linpar), ncol(linpar$linpar))
+
   if(length(families$id$gaussian)>0){
-    Y[,families$id$gaussian] <- gen_norm(linpar$linpar[,families$id$gaussian], phi=phi[families$id$gaussian], nobs=nrow(linpar$linpar), p=length(families$id$gaussian))
+    Y[,families$id$gaussian] <- gen_norm(linpar$linpar[,families$id$gaussian,drop=F], phi=parameters$phi[families$id$gaussian], n=nrow(linpar$linpar), p=length(families$id$gaussian))
   }
   if(length(families$id$binomial)>0){
-    Y[,families$id$binomial] <- gen_binom(linpar$linpar[,families$id$binomial], size=rep(1,length(families$id$binomial)), nobs=nrow(linpar$linpar), p=length(families$id$binomial))
+    Y[,families$id$binomial] <- gen_binom(linpar$linpar[,families$id$binomial,drop=F], size=rep(1,length(families$id$binomial)), n=nrow(linpar$linpar), p=length(families$id$binomial))
   }
   if(length(families$id$poisson)>0){
-    Y[,families$id$poisson] <- gen_poisson(linpar$linpar[,families$id$poisson], nobs=nrow(linpar$linpar), p=length(families$id$poisson))
+    Y[,families$id$poisson] <- gen_poisson(linpar$linpar[,families$id$poisson,drop=F], n=nrow(linpar$linpar), p=length(families$id$poisson))
   }
-  if(!is.null(Miss)) {
-    Y[Miss] <- NA
-  }
-  list(Y=Y, linpar=linpar, Z=Z)
+
+  list(Y=Y, Z=Z, linpar=linpar)
 }
 
 

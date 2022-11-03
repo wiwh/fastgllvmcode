@@ -14,55 +14,57 @@
 #' For computational speed, the convergence is checked for each observational unit `i` separately, and computations are vectorized across observations as much as possible.
 #' The `lambda` parameter is the regularization parameter. Setting it to 1 (the fault) returns the MAP. Higher values regularizes the values towards 0.
 
-compute_Z <- function(Y, X, parameters, families, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, verbose=F){
-  with(parameters, {
-    if(is.null(B)) {
-      XB <- NULL
-    } else {
-      XB <- X %*% t(B)
-    }
-
-    if (is.null(start)) {
-      Z <- compute_Z_starting_values(Y, A, XB, families)
-    } else {
-      stopifnot(is.matrix(start))
-      Z <- start
-    }
-
-    hist <- list()
-
-    # Initialize convergence vectors for all rows
-    conv <- rep(F, nrow(Y))
-    crit <- rep(Inf, nrow(Y))
-
-    # Initialize the linear parameter
-    linpar <- matrix(NA, nrow(Y), ncol(Y))
-
-
-    Z.old <- Z
-
-    for(i in 1:maxit){
-      Z.old[!conv,] <- Z[!conv, , drop=F]
-      if (length(XB) > 0) {
-        linpar[!conv,] <- compute_linpar(Z[!conv, , drop=F], A, XB=XB[!conv, , drop=F])$linpar
+compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, verbose=F){
+  with(fg,{
+    with(parameters, {
+      if(is.null(B)) {
+        XB <- NULL
       } else {
-        linpar[!conv,] <- compute_linpar(Z[!conv, , drop=F], A, XB=XB)$linpar
+        XB <- X %*% t(B)
       }
 
-      Z[!conv, ] <- Z[!conv, , drop=F] - Z_update(
-        compute_Z_score(Z[!conv, , drop=F], Y[!conv, , drop=F], A, phi, linpar[!conv, , drop=F], families, lambda=lambda),
-        compute_Z_hessian(A, phi, linpar[!conv, , drop=F], families, lambda=lambda)
-      )
+      if (is.null(start)) {
+        Z <- compute_Z_starting_values(Y, A, XB, families)
+      } else {
+        stopifnot(is.matrix(start))
+        Z <- start
+      }
 
-      if (save) hist[[i]] <- as.vector(Z)
+      hist <- list()
 
-      crit[!conv] <- rowMeans(abs(Z.old[!conv, , drop=F] - Z[!conv, , drop=F]))
-      conv[!conv] <- crit[!conv] < thresh
-      if (verbose) cat("\n", sum(conv), " converged")
-      if (all(conv)) break()
-    }
-    if (save) hist <- do.call(rbind, hist)
-    list(Z=Z, hist=hist, niter=i, converged=ifelse(i==maxit, F, T))
+      # Initialize convergence vectors for all rows
+      conv <- rep(F, nrow(Y))
+      crit <- rep(Inf, nrow(Y))
+
+      # Initialize the linear parameter
+      linpar <- matrix(NA, nrow(Y), ncol(Y))
+
+
+      Z.old <- Z
+
+      for(i in 1:maxit){
+        Z.old[!conv,] <- Z[!conv, , drop=F]
+        if (length(XB) > 0) {
+          linpar[!conv,] <- compute_linpar(Z[!conv, , drop=F], A, XB=XB[!conv, , drop=F])$linpar
+        } else {
+          linpar[!conv,] <- compute_linpar(Z[!conv, , drop=F], A, XB=XB)$linpar
+        }
+
+        Z[!conv, ] <- Z[!conv, , drop=F] - Z_update(
+          compute_Z_score(Z[!conv, , drop=F], Y[!conv, , drop=F], A, phi, linpar[!conv, , drop=F], families, lambda=lambda),
+          compute_Z_hessian(A, phi, linpar[!conv, , drop=F], families, lambda=lambda)
+        )
+
+        if (save) hist[[i]] <- as.vector(Z)
+
+        crit[!conv] <- rowMeans(abs(Z.old[!conv, , drop=F] - Z[!conv, , drop=F]))
+        conv[!conv] <- crit[!conv] < thresh
+        if (verbose) cat("\n", sum(conv), " converged")
+        if (all(conv)) break()
+      }
+      if (save) hist <- do.call(rbind, hist)
+      list(Z=Z, hist=hist, niter=i, converged=ifelse(i==maxit, F, T))
+    })
   })
 }
 
@@ -148,12 +150,13 @@ if(0) {
   devtools::load_all()
   set.seed(1231)
 
-  poisson <- 0
-  gaussian <- 0
-  binomial <- 4
+  poisson <- 500
+  gaussian <- 2000
+  binomial <- 344
+  q <- 4
 
-  fg <- gen_fastgllvm(nobs=10, p=poisson + gaussian + binomial, q=1, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F)
-  zhat <- compute_Z(fg$Y, fg$X, fg$parameters, fg$families, start=fg$parameters$Z, lambda=1)
+  fg <- gen_fastgllvm(nobs=10, p=poisson + gaussian + binomial, q=q, family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial)), k=0, intercept=F)
+  zhat <- compute_Z(fg, start=fg$parameters$Z, lambda=1)
 
   plot(fg$parameters$Z, zhat$Z, xlim=c(-3,3), ylim=c(-3,3)); abline(0, 1, col=2)
 }

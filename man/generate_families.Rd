@@ -6,6 +6,9 @@
 \usage{
 generate_families(family, p)
 }
+\arguments{
+\item{families:}{either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.}
+}
 \description{
 Generate the families list as used in the other functions
 }

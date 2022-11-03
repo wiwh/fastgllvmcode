@@ -1,11 +1,13 @@
-initialize_parameters_old <- function(parameters, dimensions, method) {
+library(Matrix)
+
+initialize_additional_parameters <- function(fg, method) {
   if (method == "full") {
-    parameters <- initialize_parameters_full(parameters, dimensions)
+    parameters$covZ <- cov(fg$Z)
   }
   if (method == "simple") {
-    parameters <- initialize_parameters_simple(parameters, dimensions)
   }
-  parameters
+  fg$parameters$hessian <- Matrix::Diagonal(fg$dimensions$p*fg$dimensions$q)*.01
+  fg$parameters
 }
 
 initialize_batches <- function(n, batch_size) {
@@ -44,16 +46,7 @@ initialize_controls <- function(controls) {
 }
 
 initialize_gradients <- function(parameters, method){
-  if (method == "full") {
-    gradients <- initialize_gradients_full(parameters)
-  }
-  if( method == "simple") {
-    gradients <- initialize_gradients_simple(parameters)
-  }
-  if( method == "rescale") {
-    gradients <- initialize_gradients_simple(parameters)
-  }
-  gradients
+  sapply(parameters, function(par) par*0, simplify=F)
 }
 
 #' Function factory to return a function that generates a learning rate as a function of i
@@ -119,64 +112,66 @@ initialize_learning_rate <- function(maxit, learning_rate.args=list(method="spal
 #' @param fastgllvm: an object of class ''fastgllvm''
 #' @param target: if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target
 #' @param rescale: if true, both Z and A will be rescaled so that Z%*%t(A) remains unchanged but Z has unit variance.
-initialize_parameters <- function(Y, X, dimensions, families, target=NULL, rescale=F) {
-  pb <- txtProgressBar(style=3, width=40)
-  cat(" Initializing: ")
+initialize_parameters <- function(fg, target=NULL, rescale=F) {
+  with(fg, {
+    pb <- txtProgressBar(style=3, width=40)
+    cat(" Initializing: ")
 
-  # TODO: try initializing using gllvm
-  Y.transformed <- Y
-  if(length(families$id$poisson) > 0) {
-    Y.transformed[,families$id$poisson] <- log(Y.transformed[,families$id$poisson] + 0.1) * 1.5
-  }
+    # TODO: try initializing using gllvm
+    Y.transformed <- Y
+    if(length(families$id$poisson) > 0) {
+      Y.transformed[,families$id$poisson] <- log(Y.transformed[,families$id$poisson] + 0.1) * 1.5
+    }
 
-  if(length(families$id$binomial) > 0) {
-    Y.transformed[,families$id$binomial] <- (Y.transformed[,families$id$binomial] - 0.5) *6
-  }
+    if(length(families$id$binomial) > 0) {
+      Y.transformed[,families$id$binomial] <- (Y.transformed[,families$id$binomial] - 0.5) *6
+    }
 
-  NAs <- is.na(Y)
-  Y.transformed[NAs] <- 0
+    NAs <- is.na(Y)
+    Y.transformed[NAs] <- 0
 
-  setTxtProgressBar(pb, 0.2)
-  cat(" Initializing B...")
+    setTxtProgressBar(pb, 0.2)
+    cat(" Initializing B...")
 
-  # Initialize XB
-  if(dimensions$k >0) {
-    B <- t(lm(Y.transformed ~ 0+X)$coef) * (1+colMeans(NAs)) # TODO: ffa should initialize with missing values as well
-    XB <- X %*% t(B)
-    Y.transformed <- Y.transformed - XB
-  } else {
-    B <- NULL
-    XB <- NULL
-  }
+    # Initialize XB
+    if(dimensions$k >0) {
+      B <- t(lm(Y.transformed ~ 0+X)$coef) * (1+colMeans(NAs)) # TODO: ffa should initialize with missing values as well
+      XB <- X %*% t(B)
+      Y.transformed <- Y.transformed - XB
+    } else {
+      B <- NULL
+      XB <- NULL
+    }
 
-  setTxtProgressBar(pb, 0.4, title="Initializing A")
-  cat(" Initializing A and phi...")
-  # Initialize A and phi
-  Y.transformed[NAs] <- NA
-  fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=100, iteratively_update_Psi = T) # TODO: there must be some Z here as well...
-  phi <- rep(1, dimensions$p)
-  phi[families$id$gaussian] <- fit.ffa$Psi[families$id$gaussian]
+    setTxtProgressBar(pb, 0.4, title="Initializing A")
+    cat(" Initializing A and phi...")
+    # Initialize A and phi
+    Y.transformed[NAs] <- NA
+    fit.ffa <- ffa(Y.transformed, dimensions$q, maxiter=100, iteratively_update_Psi = T) # TODO: there must be some Z here as well...
+    phi <- rep(1, dimensions$p)
+    phi[families$id$gaussian] <- fit.ffa$Psi[families$id$gaussian]
 
 
-  A <- fit.ffa$A
-  # transform to target
-  if (!is.null(target)) {
-    A <- psych::Procrustes(A, target)$loadings
-  }
-  setTxtProgressBar(pb, 0.9, title="Initializing Z")
-  cat(" Initializing Z...")
-  # initialize Z
-  Z <- fit.ffa$Z
-  if(rescale) {
-    rescaled <- rescale(Z, A)
-    A=rescaled$A
-    Z=rescaled$Z
-  }
-  setTxtProgressBar(pb, 1, title="Initialization Complete.")
-  cat(" Initialization complete.")
-  close(pb)
-  # re-scale zhat and A
-  list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
+    A <- fit.ffa$A
+    # transform to target
+    if (!is.null(target)) {
+      A <- psych::Procrustes(A, target)$loadings
+    }
+    setTxtProgressBar(pb, 0.9, title="Initializing Z")
+    cat(" Initializing Z...")
+    # initialize Z
+    Z <- fit.ffa$Z
+    if(rescale) {
+      rescaled <- rescale(Z, A)
+      A=rescaled$A
+      Z=rescaled$Z
+    }
+    setTxtProgressBar(pb, 1, title="Initialization Complete.")
+    cat(" Initialization complete.")
+    close(pb)
+    # re-scale zhat and A
+    list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
+  })
 }
 
 #' Given a fastgllvm object, compute good intial values.
@@ -240,7 +235,7 @@ initialize_parameters_delete <- function(fastgllvm, target=NULL, rescale=F) {
     cat(" Initialization complete.")
     close(pb)
     # re-scale zhat and A
-    list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
+    list(A=A, B=B, phi=phi, Z=Z)
   })
 }
 

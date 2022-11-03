@@ -4,11 +4,7 @@
 \alias{initialize_learning_rate}
 \title{Function factory to return a function that generates a learning rate as a function of i}
 \usage{
-initialize_learning_rate(
-  method = "constant",
-  maxit,
-  learning_rate.args = list()
-)
+initialize_learning_rate(maxit, learning_rate.args = list(method = "spall"))
 }
 \arguments{
 \item{method:}{the name of the method to use. One of "constant", "lin", "exp", "linexp", "spall".}

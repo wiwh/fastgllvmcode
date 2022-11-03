@@ -84,7 +84,8 @@ fastgllvm <- function(Y,
     Miss <- NULL
   }
 
-  fg <- new_fastgllvm(Y, X, parameters.init, families, dimensions, Miss)
+  fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
+
 
   fastgllvm.fit(fg, method=method, parameters.init=parameters.init, controls=controls, verbose=verbose, hist=hist, median=median)
 }
@@ -100,10 +101,11 @@ fastgllvm <- function(Y,
 #' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
 #'
 #' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, parameters, families, dimensions, Miss, fit=list()) {
+new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=list()) {
   fastgllvm <- structure(
     list(Y=Y,
          X=X,
+         Z=Z,
          parameters=parameters,
          families=families,
          dimensions=dimensions,
@@ -119,6 +121,7 @@ new_fastgllvm <- function(Y, X, parameters, families, dimensions, Miss, fit=list
 
 
 
+# TODO: check that Z has the correct dimensions
 validate_fastgllvm <- function(fastgllvm) {
   with(fastgllvm, {
     stopifnot(is.matrix(Y))
@@ -161,87 +164,6 @@ validate_fastgllvm <- function(fastgllvm) {
 
 
 
-
-#' Fit a fastgllvm object for fitting a gllvm model.
-#'
-fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, verbose=F, hist=F, median=F) {
-
-  if(is.null(fg$parameters)) {
-    fg$parameters <- initialize_parameters(fg$Y, fg$X, fg$dimensions, fg$families)
-  } else {
-    cat("\nInitial parameters values set to those provided.")
-  }
-
-  gradient <- initialize_gradient(fg$parameters, method=method)
-  compute_gradient <- get_compute_gradient(method = method)
-
-  batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
-
-  # compute criterion everything after each pass...
-  browser()
-  k <- 1
-
-  for (k in seq_along(batches)) {
-
-  }
-
-  Y <- fg$Y[batches[[k]],,drop=F]
-  X <- fg$X[batches[[k]],,drop=F]
-  Z <- fg$parameters$Z[batches[[k]],,drop=F]
-
-  zstar <- compute_Z(Y, X, fg$parameters, fg$families, start=Z)
-  params_hist <- list()
-  if(hist) params_hist <- c(params_hist, list(parameters))
-
-  moving_average <- parameters
-  crit <- Inf
-
-  if(is.null(controls$learning_rate.args)) controls$learning_rate.args <- list(method="spall", rate=2, end=.1)
-  if(is.null(controls$learning_rate.args$method)) controls$learning_rate.args$method <- "spall"
-  if(is.null(controls[["learning_rate"]])) controls$learning_rate <- initialize_learning_rate(maxit=controls$maxit, learning_rate.args = controls$learning_rate.args)
-
-  for(i in 1:controls$maxit){
-    # if(i < controls$maxit/2) median <- .5 else median <- F
-    moving_average_old <- moving_average
-    gradients_old <- gradients
-    # get the gradient
-    gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
-
-    # exponential smoothing step
-    # for (par in names(parameters)) {
-    #   gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
-    # }
-    parameters <- update_parameters(parameters, gradients, alpha=controls$alpha, learning_rate_i = controls$learning_rate(i), median=median)
-
-    # We track a moving average of the last 1/controls$ma iterates
-    for(k in seq_along(parameters)){
-      moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * parameters[[k]]
-    }
-
-    if(i == 1 || i%%10 == 0 || i == controls$maxit){
-      crit <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
-      cat("\n Iteration: ", i, " - crit: ", crit)
-    }
-    if(hist) params_hist <- c(params_hist, list(parameters))
-    if(i >= controls$minit && crit < controls$eps) break()
-  }
-
-  if(hist){
-    history <- sapply(names(parameters), function(par_name) {
-      do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
-    }, simplify=F)
-  }
-
-  # Update the fastgllvm object
-  fg$parameters <- moving_average
-  fg$fit <- list(
-    crit = crit,
-    controls = controls,
-    hist = if(hist) history else NULL
-  )
-  fg$converged <- ifelse(crit < controls$eps, T, F)
-  fg
-}
 
 
 #' Generates a GLLVM model.
@@ -288,12 +210,7 @@ gen_fastgllvm <- function(nobs=100,
                      q=ncol(parameters$A),
                      k=if(is.null(parameters$B)) 0 else ncol(parameters$B))
 
-  # Generate unspecified variates
-  if (is.null(Z)) {
-    parameters$Z <- gen_Z(nobs, q)
-  } else {
-    parameters$Z <- Z
-  }
+
 
   if (is.null(X)) {
     if (dimensions$k==0) {
@@ -310,8 +227,7 @@ gen_fastgllvm <- function(nobs=100,
   families <- generate_families(family, dimensions$p)
 
   # Generate data
-  linpar <- compute_linpar(parameters$Z, parameters$A, X, parameters$B)
-  Y <- generate_y(linpar, parameters$phi, families)$Y
+  variables <- gen_Y(Z=Z, X=X, parameters = parameters, families = families)
 
   if (miss.prob != 0) {
     Y[runif(prod(dim(Y))) < miss.prob] <- NA
@@ -321,7 +237,8 @@ gen_fastgllvm <- function(nobs=100,
   }
 
   fastgllvm <- new_fastgllvm(
-    Y=Y,
+    Y=variables$Y,
+    Z=variables$Z,
     X=X,
     parameters=parameters,
     families=families,
@@ -330,6 +247,7 @@ gen_fastgllvm <- function(nobs=100,
   )
 
   fastgllvm$intercept <- intercept
+  fastgllvm$parameters_true <- fastgllvm$parameters
 
   validate_fastgllvm(fastgllvm)
   fastgllvm
@@ -414,11 +332,11 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 0
-    gaussian <- 0
-    binomial <- 4
+    poisson  <- 100
+    gaussian <- 100
+    binomial <- 100
     nobs <- 100
-    q <- 1
+    q <- 5
     p <- poisson + gaussian + binomial
 
     intercept <- T
@@ -427,6 +345,8 @@ if(0) {
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(10030)
     fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
+
+    plot(simulate(fg, conditional=T)$Y, fg$Y)
     # check initialization
     # set.seed(123)
     # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
@@ -463,7 +383,7 @@ if(0) {
     plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
 
 
-    plot(fg$parameters$Z, fit.simple$parameters$Z)
+    plot(fg$Z, fit.simple$Z)
 
     # GAUSSIAN TEST
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
@@ -503,7 +423,7 @@ if(0) {
   compute_error(fit.fg$parameters$A, fg$parameters$A, rotate=T)
 
 
-  plot(fg$parameters$Z, fit.fg$parameters$Z); abline(0,-1,col=2)
+  plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
   plot(fg$par$A, psych::Procrustes(fit.fg$parameters$A, fg$parameters$A)$loadings); abline(0,1,col=2)
   points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
   plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)
