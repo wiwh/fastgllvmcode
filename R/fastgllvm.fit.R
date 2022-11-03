@@ -11,18 +11,14 @@ fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, ver
                           phi = initial_values$phi)
     rm("initial_values")
     fg$parameters <- initialize_additional_parameters(fg, method)
-    fg$hessian <- initialize_hessian_AB(fg)
+    # fg$hessian <- initialize_hessian_AB(fg)
   } else {
     cat("\nInitial parameters values set to those provided.")
   }
 
   fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
 
-  compute_gradients <- get_compute_gradients(method = method)
-
   gradients <- initialize_gradients(fg$parameters)
-  hessian   <- initialize_gradients(fg$hessian)
-
 
 
   # Beginning of the iterations
@@ -38,11 +34,17 @@ fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, ver
   # TODO: compute_Z must accept linpar as argument! for starting values or whatever
 
   # Compute the Hessian
-  fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
+  # fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
+  # Importantly, the hessian should be computed independently from the rest
+  fg$hessian <- compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families)
+  browser()
 
   # re-draw random batches every pass
   batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
   for (batch in batches) {
+    compute_dAB_centered(fg, method="simple")
+    H_old <- hessian_old(fg)
+    set.seed(123)
     compute_gradients(subset(fg, batch))
     # by the (inverse of ) Hessian
 
@@ -66,6 +68,7 @@ fastgllvm.fit <- function(fg, method, parameters.init = NULL, controls=NULL, ver
     moving_average_old <- moving_average
     gradients_old <- gradients
     # get the gradient
+
     gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
 
     # exponential smoothing step

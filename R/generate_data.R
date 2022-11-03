@@ -57,7 +57,7 @@ gen_Y <- function(Z, X, parameters, families, linpar=NULL, XB=NULL) {
     Y[,families$id$poisson] <- gen_poisson(linpar$linpar[,families$id$poisson,drop=F], n=nrow(linpar$linpar), p=length(families$id$poisson))
   }
 
-  list(Y=Y, Z=Z, linpar=linpar)
+  list(Y=Y, Z=Z, linpar=linpar$linpar)
 }
 
 

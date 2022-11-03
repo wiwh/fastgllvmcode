@@ -33,21 +33,23 @@ update_hessian_AB <- function(hessian_old, hessian_new, weight) {
 }
 
 
-mult_grad_Hessian_AB <- function(grad_AB, hessian_AB) {
+mult_invHessian_dAB <- function(dAB, hessian_AB) {
   prod <- sapply(seq_along(hessian_AB), function(j) {
-    as.vector(solve(hessian_AB[[j]], grad_AB[j,]))
+    as.vector(solve(hessian_AB[[j]], dAB[j,]))
   }, simplify=F)
   do.call(rbind, prod)
 }
 
 
 # Compute the hessian for AB
-compute_hessian_AB <- function(X, dimensions, parameters, families){
-  Z <- gen_Z(dimensions$n, dimensions$q)
-  linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
-  linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
-  ZX <- cbind(Z, X)
-  sapply(1:dimensions$p, function(j) {
-    -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/(parameters$phi[j]*nrow(ZX))
-  }, simplify=F)
+compute_hessian_AB <- function(fg){
+  with(fg, {
+    Z <- gen_Z(dimensions$n, dimensions$q)
+    linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
+    linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, families)
+    ZX <- cbind(Z, X)
+    sapply(1:dimensions$p, function(j) {
+      -(t(ZX) %*% (ZX*(linpar_bprimeprime[,j])))/(parameters$phi[j]*nrow(ZX))
+    }, simplify=F)
+  })
 }

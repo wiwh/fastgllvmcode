@@ -1,4 +1,4 @@
-initialize_parameters_simple <- function(parameters, dimensions) {
+delete_initialize_parameters_simple <- function(parameters, dimensions) {
   with(dimensions, {
     if (is.null(parameters$A)) parameters$A <- matrix(0, p, q)
     if (is.null(parameters$B)) parameters$B <- matrix(0, p, k)
@@ -20,53 +20,49 @@ initialize_gradients_simple <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
 
-compute_gradients_simple <- function(fg) {
-  fg_simulated <- fg_old <- fg <- subset(fg, batch)
+compute_dAB_centered <- function(fg, method) {
+  fg_simulated <- fg_old <- fg
 
   # Update main values and compute gradient of the sample
-
-  gradients_sample <- list()
-
-  comp_Z <- compute_Z(fg, maxit=10) # TODO: maybe reduce to 1?
-  fg$Z <- comp_Z$Z
-  fg$linpar <- fg$linpar[batch,] <- with(fg, compute_linpar(
-    Z, parameters$A , X , parameters$B))$linpar
+  fg$Z <- compute_Z(fg, maxit=10)$Z # TODO: maybe reduce to 1?
+  fg$linpar <- with(fg, compute_linpar(Z, parameters$A , X , parameters$B))$linpar
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
-  fg$mean <- fg$mean[batch,] <- compute_linpar_bprime(fg$linpar, fg$families)
+  fg$mean <- compute_linpar_bprime(fg$linpar, fg$families)
 
-  gradients_sample$AB <- compute_gradients_simple_AB(fg)
-
+  dAB_sample <- compute_dAB(fg, method)
 
   # Compute gradient on a simulated sample
   fg_simulated <- simulate(fg, return_fastgllvm=T)
+  if (method == "full") fg_simulated$mean <- compute_linpar_bprime(fg_simulated$linpar, fg_simulated$families)
   fg_simulated$Z <- compute_Z(fg_simulated, maxit=10)$Z
-  gradients_simulated <- compute_gradients(fg_simulated)
+  dAB_simulated <- compute_dAB(fg_simulated, method)
 
-  phi <- compute_psi_simple_phi(Y, parameters, families)
-  gradients <- mult_grad_Hessian_AB(gradients_sample$AB - gradients_simulated$AB, fg$hessian)
+  dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, fg$hessian)
 
   # TODO: compare to the old one below, they need to get the same thing!!
 
+  list(dAB = dAB, linpar=fg$linpar, mean=fg$mean)
 }
 
 
-compute_gradients_simple_AB <- function(fg) {
-  # for AB
+compute_dAB <- function(fg, method) {
   with(fg, {
-    if (is.null(parameters$B)) {
-      AB <- t(Y) %*% Z
+    if (dimensions$k == 0) {
+      ZX <- Z
     } else {
-      AB <- t(Y) %*% cbind(Z, X)
+      ZX <- cbind(Z, X)
     }
-    phi <-
-    list(AB=AB, phi=phi)
+
+    if ( method == "simple" ) {
+      dAB <- t(Y) %*% (ZX/dimensions$n)
+    } else if (method == "full") {
+      dAB <- t(Y - mean) %*% (ZX/dimensions$n)
+    } else {
+      stop ("Unkown method `method`")
+    }
+    dAB
   })
 }
-
-compute_gradients_simple_phi <- function(fg) {
-
-}
-
 
 compute_gradients_simple_old <- function(Y, X, parameters, families,  ...) {
   parameters_sim <- parameters_sam <- parameters
@@ -130,11 +126,6 @@ compute_psi_simple_phi <- function(Y, parameters, families) {
   psi_phi/10
 }
 
-compute_psi_hessian <- function(Z, linpar_bprimeprime, phi){
-  sapply(1:length(phi), function(j) {
-    -(t(Z) %*% (Z*(linpar_bprimeprime[,j])))/phi[j]
-  }, simplify=F)
-}
 
 if(0) {
   devtools::load_all()
@@ -173,17 +164,37 @@ if(0) {
 }
 
 if(0) {
+  # TODO: i was here, continue 03.11.2022
   # Testing behavior of rescale
   devtools::load_all()
   set.seed(1234)
-  poisson  <-0
+  poisson  <- 10
   gaussian <- 10
   binomial <- 10
   q <- 1
+  k <- 0
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(120303)
-  fg <- gen_fastgllvm(nobs=1000, p=p, q=q, family=family, phi=3*(1:p)/p, k=1, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_fastgllvm(nobs=64, p=p, q=q, family=family, phi=3*(1:p)/p, k=1, intercept=T, miss.prob = 0, scale=1)
+
+  fg$hessian <- compute_hessian_AB(fg)
+  for(i in 1:100){
+    fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg), weight=.95)
+  }
+  hessian <- fg$hessian
+
+  set.seed(123)
+  sims <- t(sapply(1:1000, function(na) {
+    fg <- simulate(fg, return_fastgllvm = TRUE)
+    # fg$hessian <- lapply(hessian, function(na) diag(1, ncol(na)))
+    fg$hessian <- hessian
+    as.vector(compute_dAB_centered(fg, method="full")$dAB)
+  }))
+  boxplot(sims)
+  hist(apply(sims,2,median))
+  hist(colMeans(sims))
+  apply(sims,2,mean)
 
   param1 <- fg$parameters
   compute_Z(fg)
