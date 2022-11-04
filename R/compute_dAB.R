@@ -20,28 +20,30 @@ initialize_gradients_simple <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
 
-compute_dAB_centered <- function(fg, method) {
-  fg_simulated <- fg_old <- fg
-
+compute_dAB_centered <- function(fg, method, hessian) {
   # Update main values and compute gradient of the sample
-  fg$Z <- compute_Z(fg, maxit=10)$Z # TODO: maybe reduce to 1?
-  fg$linpar <- with(fg, compute_linpar(Z, parameters$A , X , parameters$B))$linpar
+  fg$Z <- compute_Z(fg, start=fg$Z, maxit=4)$Z # TODO: maybe reduce to 1?
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
-  fg$mean <- compute_linpar_bprime(fg$linpar, fg$families)
+  fg <- compute_mean(fg, mean=ifelse(method=="full", TRUE, FALSE))
 
-  dAB_sample <- compute_dAB(fg, method)
 
   # Compute gradient on a simulated sample
   fg_simulated <- simulate(fg, return_fastgllvm=T)
-  if (method == "full") fg_simulated$mean <- compute_linpar_bprime(fg_simulated$linpar, fg_simulated$families)
-  fg_simulated$Z <- compute_Z(fg_simulated, maxit=10)$Z
+  fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=4)$Z
+  fg_simulated <- compute_mean(fg_simulated, mean=ifelse(method=="full", TRUE, FALSE))
+
+  dAB_sample <- compute_dAB(fg, method)
   dAB_simulated <- compute_dAB(fg_simulated, method)
+  if (is.null(hessian)) {
+    dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
+  } else {
+    dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
+  }
 
-  dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, fg$hessian)
+  dAB <- AB_separate(dAB, fg$dimensions)
 
-  # TODO: compare to the old one below, they need to get the same thing!!
-
-  list(dAB = dAB, linpar=fg$linpar, mean=fg$mean)
+  # TODO: compare to the old method below, they need to get the same thing!!
+  list(dA = dAB$A, dB=dAB$B, fg=fg)
 }
 
 
@@ -164,55 +166,33 @@ if(0) {
 }
 
 if(0) {
-  # TODO: i was here, continue 03.11.2022
-  # Testing behavior of rescale
+  # Testing behavior of the different scores
   devtools::load_all()
   set.seed(1234)
   poisson  <- 10
   gaussian <- 10
   binomial <- 10
   q <- 1
-  k <- 0
+  k <- 1
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(120303)
-  fg <- gen_fastgllvm(nobs=64, p=p, q=q, family=family, phi=3*(1:p)/p, k=1, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_fastgllvm(nobs=16, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
 
-  fg$hessian <- compute_hessian_AB(fg)
+  fg$hessian <- simulate_hessian_AB(fg)
   for(i in 1:100){
-    fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg), weight=.95)
+    fg$hessian <- update_hessian_AB(fg$hessian, simulate_hessian_AB(fg), weight=.95)
   }
   hessian <- fg$hessian
+  # fg$hessian <- lapply(hessian, function(na) diag(1, ncol(na)))
 
+  method="full"
   set.seed(123)
   sims <- t(sapply(1:1000, function(na) {
     fg <- simulate(fg, return_fastgllvm = TRUE)
-    # fg$hessian <- lapply(hessian, function(na) diag(1, ncol(na)))
-    fg$hessian <- hessian
-    as.vector(compute_dAB_centered(fg, method="full")$dAB)
+    as.vector(compute_dAB_centered(fg, method=method, hessian=hessian)$dAB)
   }))
-  boxplot(sims)
-  hist(apply(sims,2,median))
-  hist(colMeans(sims))
-  apply(sims,2,mean)
-
-  param1 <- fg$parameters
-  compute_Z(fg)
-
-  compute_gradients_simple(fg, Z_maxit=1)
-
-
-  plot(param1$Z, param2$Z); abline(0,1)
-
-  param1 <- recenter(param1, 1)
-  param2 <- recenter(param2, 1)
-
-  plot(param1$Z, param2$Z); abline(0,1)
-
-  param1$B
-  param2$B
-  all.equal(param1$B, param2$B)
-
-
-
+  boxplot(sims, outline=T)
+  points(colMeans(sims), col=2)
+  points(apply(sims,2,median), col=3)
 }

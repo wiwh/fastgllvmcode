@@ -1,6 +1,10 @@
 AB_separate <- function(AB, dimensions) {
    A = AB[, 1:dimensions$q, drop = F]
-   B = AB[, (dimensions$q+1):ncol(AB), drop=F]
+   if (dimensions$k > 0) {
+    B = AB[, (dimensions$q+1):ncol(AB), drop=F]
+   } else {
+     B <- NULL
+   }
   list(A = A, B = B)
 }
 

@@ -44,11 +44,11 @@ fastgllvm <- function(Y,
                       intercept=T,
                       Z.init = NULL,
                       parameters.init=NULL,
-                      controls=list(),
                       method="simple",
                       verbose = F,
                       hist = T,
-                      median= F,
+                      trim = 0.2,
+                      alpha = 0,
                       batch_size=nrow(Y)) {
 
   stopifnot(is.matrix(Y))
@@ -64,7 +64,7 @@ fastgllvm <- function(Y,
       k <- 0
     }
   } else {
-    if (intercept && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
+    if (intercept && ncol(X) > 0 && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
     k <- ncol(X)
   }
 
@@ -75,8 +75,14 @@ fastgllvm <- function(Y,
     k = k
   )
 
+  controls <- list()
   controls <- initialize_controls(controls)
-  controls$batch_size = batch_size
+  controls$batch_size <- batch_size
+  controls$trim <- trim
+  controls$method <- method
+  controls$hist <- hist
+  controls$alpha <- alpha
+  controls$verbose <- verbose
 
   # get mising values
   Miss <- is.na(Y)
@@ -87,7 +93,7 @@ fastgllvm <- function(Y,
   fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
 
 
-  fastgllvm.fit(fg, method=method, parameters.init=parameters.init, controls=controls, verbose=verbose, hist=hist, median=median)
+  fastgllvm.fit(fg, parameters.init=parameters.init, controls=controls)
 }
 
 # Constructor
@@ -214,7 +220,7 @@ gen_fastgllvm <- function(nobs=100,
 
   if (is.null(X)) {
     if (dimensions$k==0) {
-      X <- matrix(NA, nobs, 0)
+      X <- matrix(NA, dimensions$n, 0)
     } else {
       X <- gen_X(dimensions$n, dimensions$k, intercept)
     }

@@ -2,7 +2,7 @@ library(Matrix)
 
 initialize_additional_parameters <- function(fg, method) {
   if (method == "full") {
-    parameters$covZ <- cov(fg$Z)
+    fg$parameters$covZ <- cov(fg$Z)
   }
   if (method == "simple") {
   }

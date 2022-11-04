@@ -26,7 +26,9 @@ initialize_hessian_AB <- function(fg) {
   fg$parameters$hessian <- lapply(1:fg$dimensions$p, function(na)diag(10, fg$dimensions$q + fg$dimensions$k))
 }
 
+
 update_hessian_AB <- function(hessian_old, hessian_new, weight) {
+  warning("DO NOT UPDATE HESSIAN; DO NOT INCLUDE TIME DEPENDENCE THAT WAY")
   lapply(seq_along(hessian_old), function(i){
     weight * hessian_old[[i]] + (1-weight) * hessian_new[[i]]
   })
@@ -42,7 +44,7 @@ mult_invHessian_dAB <- function(dAB, hessian_AB) {
 
 
 # Compute the hessian for AB
-compute_hessian_AB <- function(fg){
+simulate_hessian_AB <- function(fg){
   with(fg, {
     Z <- gen_Z(dimensions$n, dimensions$q)
     linpar <- compute_linpar(Z, parameters$A, X, parameters$B)
