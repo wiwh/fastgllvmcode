@@ -88,6 +88,7 @@ simulate.fastgllvm <- function(fastgllvm, nsim=1, conditional=F, return_fastgllv
     fastgllvm$Y <- simu$Y
     fastgllvm$Z <- simu$Z
     fastgllvm$linpar <- simu$linpar
+    fastgllvm$mean <- NULL
     return(fastgllvm)
   } else {
     return(simu)
