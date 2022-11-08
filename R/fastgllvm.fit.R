@@ -18,7 +18,11 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
 
   gradients <- initialize_gradients(fg$parameters)
-  hessian <- simulate_hessian_AB(fg)  # this does not use Z nor Y from fg
+  if (controls$hessian) {
+    hessian <- simulate_hessian_AB(fg)
+  } else {
+    hessian <- NULL
+  }
 
   params_hist <- list()
   if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
@@ -31,8 +35,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     fg$Y[fg$Miss] <- fg$mean[fg$Miss]
   }
   signs <- fg$parameters$A * 0 + 1
-
-  for (i in 1:100) {
+  for (i in 1:controls$maxit) {
     # compute criterion after each pass...
     # only update the hessian once per pass...
     # TODO: compute_Z must accept linpar as argument! for starting values or whatever
@@ -40,7 +43,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     if (i < 20){
       step_size = controls$alpha
     } else {
-      step_size = controls$alpha*5/(i-15)
+      step_size = controls$alpha*20/i
     }
 
     # Compute the Hessian
@@ -48,10 +51,11 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     # Importantly, the hessian must be computed independently from the rest
     fg <- compute_mean(fg)
     fg$deviance <- mean(compute_deviance(subset(fg, 1:20)))
-    # cat("\ni: ", i, "dev:", fg$deviance)
+    cat("\ni: ", i, "dev:", fg$deviance)
 
-    hessian <- simulate_hessian_AB(fg)
-    # hessian <- NULL
+    warning("the hessian must be recomputed at every batch....")
+
+
 
     # re-draw random batches every pass
     batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
@@ -65,7 +69,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       # signs[sign(signs) == sign_a] <- signs[sign(signs) == sign_a] + sign_a[sign(signs) == sign_a]
       # signs[sign(signs) != sign_a] <- -sign_a[sign(signs) !=sign_a]
 
-      fg$parameters$A <- fg$parameters$A - trim(step_size *dAB$dA, controls$trim)
+      fg$parameters$A <- fg$parameters$A - trim(step_size * dAB$dA, controls$trim)
       if (!is.null(fg$parameters$B)) {
         fg$parameters$B <- fg$parameters$B - trim(step_size * dAB$dB, controls$trim)
       }
@@ -138,29 +142,55 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
 
 if(0) {
+
+  library(gmf)
+  # TODO: GROS PROBLEME AVEC LA HESSIENNE?
   devtools::load_all()
-  poisson  <- 100
+  poisson  <- 0
   gaussian <- 0
-  binomial <- 0
+  binomial <- 50
   nobs <- 1000
-  q <- 1
+  q <- 2
   p <- poisson + gaussian + binomial
 
   intercept <- T
-  k <- 0
+  k <- 1
   if(k==0 & intercept) k <- 1
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(123)
+  # set.seed(1234)
   fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
 
-  set.seed(1304)
-  fit <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=nobs/10, trim=.05, intercept=T, alpha=.1)
+  # set.seed(1304)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=nobs, trim=.5, intercept=intercept, alpha=1, hessian=T, maxit=50)
+  plot(fit1)
 
+  fit.gmf <- gmf(fg$Y, fg$X, family=binomial(), p=1)
+
+  fitm <- compute_mean(fit1)
+  plot(fg$Y, fitm$mean)
+  points(fg$Y, fit.gmf$fit, col=2)
+  abline(0,1,col=2)
+
+  fit2 <- fitm
+  fit2$mean <- fit.gmf$fit
+
+  mean(compute_deviance(fitm))
+  mean(compute_deviance(fit2))
+
+
+
+
+  # fit <- fit2
+
+  fit <- fit1
   plot(fit)
   plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=3)
+  points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=4)
+  points(fg$parameters$B, t(fit.gmf$beta), col=4)
   points(fg$parameters$B, fit$parameters$B, pch=2, col=3)
   abline(0,1,col=2)
+  plot(fg$Z, fit$Z); abline(0,-1,col=2); abline(0,1,col=2)
 
 
   library(ltm)

@@ -22,14 +22,15 @@ initialize_gradients_simple <- function(parameters) {
 
 compute_dAB_centered <- function(fg, method, hessian) {
   # Update main values and compute gradient of the sample
-  fg$Z <- compute_Z(fg, start=fg$Z, maxit=4)$Z # TODO: maybe reduce to 1?
+  fg$Z <- scale(compute_Z(fg, start=fg$Z, maxit=10)$Z, scale=F, center = F) # TODO: maybe reduce to a maxit of 1?
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
   fg <- compute_mean(fg, mean=ifelse(method=="full", TRUE, FALSE))
 
 
   # Compute gradient on a simulated sample
   fg_simulated <- simulate(fg, return_fastgllvm=T)
-  fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=4)$Z
+  fg_simulated$Z <- scale(compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z, scale=F, center=F)
+  warning("Z has been rescaled. check compute_dAB_centered")
   fg_simulated <- compute_mean(fg_simulated, mean=ifelse(method=="full", TRUE, FALSE))
 
   dAB_sample <- compute_dAB(fg, method)
@@ -170,14 +171,14 @@ if(0) {
   devtools::load_all()
   set.seed(1234)
   poisson  <- 10
-  gaussian <- 10
-  binomial <- 10
+  gaussian <- 0
+  binomial <- 0
   q <- 1
   k <- 1
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(120303)
-  fg <- gen_fastgllvm(nobs=16, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
 
   fg$hessian <- simulate_hessian_AB(fg)
   for(i in 1:100){
@@ -188,9 +189,9 @@ if(0) {
 
   method="full"
   set.seed(123)
-  sims <- t(sapply(1:1000, function(na) {
+  sims <- t(sapply(1:200, function(na) {
     fg <- simulate(fg, return_fastgllvm = TRUE)
-    as.vector(compute_dAB_centered(fg, method=method, hessian=hessian)$dAB)
+    as.vector(unlist(compute_dAB_centered(fg, method=method, hessian=hessian)[c("dA", "dB")]))
   }))
   boxplot(sims, outline=T)
   points(colMeans(sims), col=2)

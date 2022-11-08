@@ -242,7 +242,9 @@ initialize_parameters_delete <- function(fastgllvm, target=NULL, rescale=F) {
 # if rescale.A is TRUE, also rescale A
 # if rescale.B is an integer j>0 corresponding to the intercept column of the design matrix X, then rescale B to absorb the intercept
 # if both rescale.A and rescale.B are True, the linpar will be the same after the rescaling. This behavior is tested below.
-rescale <- function(parameters, rescale.A = F, rescale.B = F, target.cov=NULL) {
+rescale <- function(fg, rescale.A = F, rescale.B = F, target.cov=NULL) {
+  parameters <- fg$parameters
+  parameters$Z <- fg$Z
   Z <- scale(parameters$Z, scale=F)
   b <- matrix(attr(Z, "scaled:center"), nrow=1)
 
@@ -272,7 +274,10 @@ rescale <- function(parameters, rescale.A = F, rescale.B = F, target.cov=NULL) {
   }
   parameters$Z <- Z
 
-  parameters
+  fg$Z <- parameters$Z
+  parameters$Z <- NULL
+  fg$parameters <- parameters
+  fg
 }
 
 # Recenter Z,
