@@ -6,7 +6,8 @@
 #' @param intercept: a boolean (default:TRUE) indicating whether an intercept should be included in the model. If `X` is supplied and an intercept is desired, the first column of `X` must be a vector of ones to model the intercept.
 #' @param gradient_function: one of: "simple", "full", or a user-defined function.
 #' @param parameters.init: a list containing "A", "B", and "phi".
-#' @description
+#' @param hessian: one of "median", "F", or "T"
+#' @description Fits a gllvm model.
 #'
 #' @details
 #' The implemented families currently are "gaussian", "binomial", or "poisson.
@@ -48,6 +49,7 @@ fastgllvm <- function(Y,
                       verbose = F,
                       hist = T,
                       hessian = T,
+                      use_signs = F,
                       trim = 0.2,
                       alpha = 0,
                       batch_size=nrow(Y),
@@ -83,6 +85,7 @@ fastgllvm <- function(Y,
   controls$trim <- trim
   controls$method <- method
   controls$hessian <- hessian
+  controls$use_signs <- use_signs
   controls$hist <- hist
   controls$alpha <- alpha
   controls$verbose <- verbose
@@ -240,8 +243,8 @@ gen_fastgllvm <- function(nobs=100,
   variables <- gen_Y(Z=Z, X=X, parameters = parameters, families = families)
 
   if (miss.prob != 0) {
-    Y[runif(prod(dim(Y))) < miss.prob] <- NA
-    Miss <- is.na(Y)
+    variables$Y[runif(prod(dim(variables$Y))) < miss.prob] <- NA
+    Miss <- is.na(variables$Y)
   } else {
     Miss <- NULL
   }
@@ -299,8 +302,7 @@ generate_parameters <- function(A, B, phi, p, q, k){
 
 
 #' Generate the families list as used in the other functions
-#' @param families: either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.
-#' @value families: a list of families
+#' @param family: either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.
 generate_families <- function(family, p){
   stopifnot(is.character(family))
   if (!(length(family) %in% c(1,p))) stop("Length of the 'family' vector must be either 1 or p.")

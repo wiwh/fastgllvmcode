@@ -1,6 +1,6 @@
 #' Initialize Imputation
 #'
-#' @param
+#' @inheritParams fastgllvm
 
 initialize_imputation <- function(Y) {
   means <- colMeans(Y, na.rm=T)

@@ -12,12 +12,15 @@ fastgllvm(
   intercept = T,
   Z.init = NULL,
   parameters.init = NULL,
-  controls = list(),
   method = "simple",
   verbose = F,
   hist = T,
-  median = F,
-  batch_size = nrow(Y)
+  hessian = T,
+  use_signs = F,
+  trim = 0.2,
+  alpha = 0,
+  batch_size = nrow(Y),
+  maxit = 100
 )
 }
 \arguments{
@@ -34,9 +37,11 @@ fastgllvm(
 \item{gradient_function:}{one of: "simple", "full", or a user-defined function.}
 
 \item{parameters.init:}{a list containing "A", "B", and "phi".}
+
+\item{hessian:}{one of "median", "F", or "T"}
 }
 \description{
-
+Fits a gllvm model.
 }
 \details{
 The implemented families currently are "gaussian", "binomial", or "poisson.

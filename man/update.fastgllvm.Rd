@@ -4,7 +4,10 @@
 \alias{update.fastgllvm}
 \title{Update the fit with another round of stochastic approximation}
 \usage{
-update.fastgllvm(f, ...)
+\method{update}{fastgllvm}(fg, ...)
+}
+\arguments{
+\item{...:}{named arguments, same as in the call to fastgllvm}
 }
 \description{
 Update the fit with another round of stochastic approximation

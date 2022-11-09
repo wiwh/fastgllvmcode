@@ -4,14 +4,14 @@
 \alias{simulate.fastgllvm}
 \title{Simulate new data from a given fastgllvm object}
 \usage{
-\method{simulate}{fastgllvm}(fastgllvm, nsim = 1, conditional = F)
+\method{simulate}{fastgllvm}(fastgllvm, nsim = 1, conditional = F, return_fastgllvm = F)
 }
 \arguments{
 \item{index:}{numeric vector indicating which observation unit to simulate, useful when covariate information X is provided.}
 
 \item{value:}{a fastgllvm object with the simulations}
 
-\item{conditional:}{should the simulation be conditional on fastgllvm$parameters$Z?}
+\item{conditional:}{should the simulation be conditional on fastgllvm$Z?}
 }
 \description{
 Simulate new data from a given fastgllvm object

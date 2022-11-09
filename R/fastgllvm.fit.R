@@ -27,18 +27,29 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   params_hist <- list()
   if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
 
+  # # sign stuff
+  # signs_counts <- signs_old <- signs_new <- sign(unlist(fg$parameters[c("A", "B")])) * 0
+  # signs_boost <- 1
+  # signs_hist <- list()
   # Beginning of the iterations
   # ---------------------------
+  ma <- fg$parameters
 
   # impute for Y
   if(!is.null(fg$Miss)) {
     fg$Y[fg$Miss] <- fg$mean[fg$Miss]
   }
-  signs <- fg$parameters$A * 0 + 1
+
   for (i in 1:controls$maxit) {
+    # sign stuff
+    # signs_old <- signs_new
+    fg_old <- fg # TODO remove this..
+
     # compute criterion after each pass...
     # only update the hessian once per pass...
+    if (controls$hessian) hessian <- simulate_hessian_AB(fg)
     # TODO: compute_Z must accept linpar as argument! for starting values or whatever
+
 
     if (i < 20){
       step_size = controls$alpha
@@ -46,15 +57,19 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       step_size = controls$alpha*20/i
     }
 
-    # Compute the Hessian
+    # update the Hessian
     # fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
     # Importantly, the hessian must be computed independently from the rest
-    fg <- compute_mean(fg)
-    fg$deviance <- mean(compute_deviance(subset(fg, 1:20)))
+    fg <- compute_mean(fg)  # TODO: compute mean based on fa mayhaps?
+    fg$parameters$phi <- compute_phi(fg)
+    # impute for Y
+    if(!is.null(fg$Miss)) {
+      fg$Y[fg$Miss] <- fg$mean[fg$Miss]
+    }
+    fg$deviance <- mean(compute_deviance(fg))
     cat("\ni: ", i, "dev:", fg$deviance)
 
     warning("the hessian must be recomputed at every batch....")
-
 
 
     # re-draw random batches every pass
@@ -62,7 +77,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
     for (batch in batches) {
       fg_batch <- subset(fg, batch)
-      dAB <- compute_dAB_centered(fg_batch, method = controls$method, hessian=hessian)
+      dAB <- compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
 
       # update_a <-  trim(signs * step_size *dAB$dA, controls$trim)
       # sign_a <- sign(update_a)
@@ -77,15 +92,49 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
       # cat("\nSign:", signs)
     }
+
+    ma <- update_moving_average(ma, fg$parameters, 0.9)
+    # sign stuff
+    # signs_new <- sign(unlist(fg$parameters[c("A", "B")]) - unlist(fg_old$parameters[c("A", "B")]))
+    # signs_counts <- update_signs_count(signs_counts, signs_old, signs_new)
+    # if(mean(signs_counts) < 1) signs_boost <- signs_boost * .95 else signs_boost <- signs_boost * 1.05
+    # cat(" signs_boost = ", signs_boost)
+    # signs_hist <- c(signs_hist, list(signs_counts))
   }
+
+
+  fg$parameters <- ma
+  fg <- compute_mean(fg)
+
   if(controls$hist){
     history <- sapply(names(fg$parameters), function(par_name) {
       do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
     }, simplify=F)
   }
+
+  # sign stuff
+  # fg$fit$signs_hist  <- do.call(rbind, signs_hist)
+
+
   fg$fit$hist <- if(controls$hist) history else NULL
+  fg$controls <- controls
   fg$Z <- compute_Z(fg, start=fg$Z)$Z
   fg
+}
+
+update_signs_count <- function(signs_count, signs_old, signs_new) {
+  signs_equal <- signs_new == signs_old
+  signs_count[signs_equal] <- signs_count[signs_equal] + 1
+  signs_count[!signs_equal] <- 0
+  signs_count
+}
+
+# update moving average
+
+update_moving_average <- function(moving_average, parameters, weight) {
+  sapply(names(moving_average), function(par) {
+    moving_average[[par]] <- weight * moving_average[[par]] + (1 - weight) *parameters[[par]]
+  }, simplify=F)
 }
 
 #
@@ -143,64 +192,68 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
 if(0) {
 
-  library(gmf)
-  # TODO: GROS PROBLEME AVEC LA HESSIENNE?
   devtools::load_all()
-  poisson  <- 0
+  poisson  <- 100
   gaussian <- 0
-  binomial <- 50
+  binomial <- 0
   nobs <- 1000
-  q <- 2
+  q <- 1
   p <- poisson + gaussian + binomial
+
 
   intercept <- T
   k <- 1
   if(k==0 & intercept) k <- 1
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  # set.seed(1234)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
+  set.seed(2030)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0.3, scale=1)
 
-  # set.seed(1304)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=nobs, trim=.5, intercept=intercept, alpha=1, hessian=T, maxit=50)
-  plot(fit1)
+  set.seed(1304)
+  fit <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.05, intercept=intercept, alpha=1, hessian=T, maxit=200, use_signs = F)
+  plot(fit)
+  fit <- update(fit, alpha=fit$controls$alpha/4, maxit=20)
+  plot(fit)
+  fit$parameters$A
+  fit <- compute_mean(fit)
 
-  fit.gmf <- gmf(fg$Y, fg$X, family=binomial(), p=1)
+  library(gmf)
+  fit.gmf <- gmf(fg$Y, family=poisson(), p=q, intercept = T)
 
-  fitm <- compute_mean(fit1)
-  plot(fg$Y, fitm$mean)
+  fit <- compute_mean(fit)
+  plot(fg$Y, fit$mean, ylim=c(0, 120))
   points(fg$Y, fit.gmf$fit, col=2)
   abline(0,1,col=2)
 
-  fit2 <- fitm
+  fit2 <- fit
   fit2$mean <- fit.gmf$fit
 
-  mean(compute_deviance(fitm))
+  mean(compute_deviance(fit))
   mean(compute_deviance(fit2))
 
 
 
 
-  # fit <- fit2
-
-  fit <- fit1
   plot(fit)
-  plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=3)
-  points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=4)
-  points(fg$parameters$B, t(fit.gmf$beta), col=4)
-  points(fg$parameters$B, fit$parameters$B, pch=2, col=3)
+  plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=1)
+  points(fg$parameters$B, fit$parameters$B, pch=2, col=1)
+  points(fg$parameters$phi, fit$parameters$phi, pch=3, col=1)
   abline(0,1,col=2)
-  plot(fg$Z, fit$Z); abline(0,-1,col=2); abline(0,1,col=2)
 
+  points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=2)
+  points(fg$parameters$B, t(fit.gmf$beta), col=2)
+  plot(fg$Z, fit$Z); abline(0,-1,col=2); abline(0,1,col=2)
+  points(fg$Z, -fit.gmf$u, col=2)
 
   library(ltm)
   if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
   if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
 
-  plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=3)
-  points(fg$parameters$B, fit$parameters$B, pch=2, col=3)
-  points(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings)#, xlim=c(-5,5), ylim=c(-5,5))
-  points(fg$parameters$B, fit.ltm$coefficients[,1], pch=2)
+  plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings)
+  points(fg$parameters$B, fit$parameters$B, pch=2)
+  abline(0,1,col=2)
+  points(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings, col=2)#, xlim=c(-5,5), ylim=c(-5,5))
+  points(fg$parameters$B, fit.ltm$coefficients[,1], pch=2, col=2)
   # points(fg$parameters$A, psych::Procrustes(fit.full$parameters$A, fg$parameters$A)$loadings, col=2)
   # points(fg$parameters$B, fit.full$parameters$B, pch=2, col=2)
   legend(x="bottomright",pch=1,  legend=c("ltm","full", "simple"), col=1:3)

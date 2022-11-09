@@ -20,25 +20,30 @@ initialize_gradients_simple <- function(parameters) {
   sapply(parameters, function(par) par*0, simplify=F)
 }
 
-compute_dAB_centered <- function(fg, method, hessian) {
+compute_dAB_centered <- function(fg, controls, hessian) {
+
   # Update main values and compute gradient of the sample
   fg$Z <- scale(compute_Z(fg, start=fg$Z, maxit=10)$Z, scale=F, center = F) # TODO: maybe reduce to a maxit of 1?
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
-  fg <- compute_mean(fg, mean=ifelse(method=="full", TRUE, FALSE))
+  fg <- compute_mean(fg, mean=ifelse(controls$method=="full", TRUE, FALSE))
 
 
   # Compute gradient on a simulated sample
   fg_simulated <- simulate(fg, return_fastgllvm=T)
   fg_simulated$Z <- scale(compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z, scale=F, center=F)
   warning("Z has been rescaled. check compute_dAB_centered")
-  fg_simulated <- compute_mean(fg_simulated, mean=ifelse(method=="full", TRUE, FALSE))
+  fg_simulated <- compute_mean(fg_simulated, mean=ifelse(controls$method=="full", TRUE, FALSE))
 
-  dAB_sample <- compute_dAB(fg, method)
-  dAB_simulated <- compute_dAB(fg_simulated, method)
+  dAB_sample <- compute_dAB(fg, controls$method)
+  dAB_simulated <- compute_dAB(fg_simulated, controls$method)
   if (is.null(hessian)) {
     dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
   } else {
     dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
+  }
+
+  if (controls$use_signs) {
+    dAB <- sign(dAB)
   }
 
   dAB <- AB_separate(dAB, fg$dimensions)
