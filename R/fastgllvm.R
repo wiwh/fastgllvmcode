@@ -53,7 +53,10 @@ fastgllvm <- function(Y,
                       trim = 0.2,
                       alpha = 0,
                       batch_size=nrow(Y),
-                      maxit=100) {
+                      maxit=100,
+                      H=1,
+                      H.seed = NULL,
+                      rescale=F) {
 
   stopifnot(is.matrix(Y))
 
@@ -79,17 +82,20 @@ fastgllvm <- function(Y,
     k = k
   )
 
-  controls <- list()
-  controls <- initialize_controls(controls)
-  controls$batch_size <- batch_size
-  controls$trim <- trim
-  controls$method <- method
-  controls$hessian <- hessian
-  controls$use_signs <- use_signs
-  controls$hist <- hist
-  controls$alpha <- alpha
-  controls$verbose <- verbose
-  controls$maxit <- maxit
+  controls <- list(
+    batch_size = batch_size,
+    trim = trim,
+    method = method,
+    hessian = hessian,
+    use_signs = use_signs,
+    hist = hist,
+    alpha = alpha,
+    verbose = verbose,
+    maxit = maxit,
+    H = H,
+    H.seed = H.seed,
+    rescale = rescale
+  )
 
   # get mising values
   Miss <- is.na(Y)

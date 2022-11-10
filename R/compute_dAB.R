@@ -21,21 +21,22 @@ initialize_gradients_simple <- function(parameters) {
 }
 
 compute_dAB_centered <- function(fg, controls, hessian) {
-
   # Update main values and compute gradient of the sample
-  fg$Z <- scale(compute_Z(fg, start=fg$Z, maxit=10)$Z, scale=F, center = F) # TODO: maybe reduce to a maxit of 1?
+  fg$Z <- compute_Z(fg, start=fg$Z, maxit=10)$Z # TODO: maybe reduce to a maxit of 1?
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
-  fg <- compute_mean(fg, mean=ifelse(controls$method=="full", TRUE, FALSE))
+  fg <- compute_mean(fg)
 
 
-  # Compute gradient on a simulated sample
+  # Simulate a sample
   fg_simulated <- simulate(fg, return_fastgllvm=T)
-  fg_simulated$Z <- scale(compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z, scale=F, center=F)
-  warning("Z has been rescaled. check compute_dAB_centered")
-  fg_simulated <- compute_mean(fg_simulated, mean=ifelse(controls$method=="full", TRUE, FALSE))
+  fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
+  fg_simulated <- compute_mean(fg_simulated)
 
+  # Compute the centered gradients on both the sample and simulated fastgllvm objects
   dAB_sample <- compute_dAB(fg, controls$method)
   dAB_simulated <- compute_dAB(fg_simulated, controls$method)
+
+
   if (is.null(hessian)) {
     dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
   } else {
@@ -48,8 +49,15 @@ compute_dAB_centered <- function(fg, controls, hessian) {
 
   dAB <- AB_separate(dAB, fg$dimensions)
 
+  dphi_sample <- compute_phi(fg)
+  dphi_simulated <- compute_phi(fg_simulated)
+
+  dphi <- dphi_simulated - dphi_sample
+
+  # dcovZ <- cov(fg$Z) - cov(fg_simulated$Z)
+
   # TODO: compare to the old method below, they need to get the same thing!!
-  list(dA = dAB$A, dB=dAB$B, fg=fg)
+  list(dA = dAB$A, dB=dAB$B, fg=fg, covZ=cov(fg_simulated$Z), dphi=dphi)#, dcovZ=dcovZ)
 }
 
 
@@ -175,30 +183,40 @@ if(0) {
   # Testing behavior of the different scores
   devtools::load_all()
   set.seed(1234)
-  poisson  <- 10
+  poisson  <- 100
   gaussian <- 0
   binomial <- 0
   q <- 1
   k <- 1
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(120303)
+  set.seed(12395)
   fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
 
   fg$hessian <- simulate_hessian_AB(fg)
   for(i in 1:100){
     fg$hessian <- update_hessian_AB(fg$hessian, simulate_hessian_AB(fg), weight=.95)
   }
-  hessian <- fg$hessian
   # fg$hessian <- lapply(hessian, function(na) diag(1, ncol(na)))
 
-  method="full"
+  method <- "full"
+  use_signs <- T
+  hessian <- NULL
+
   set.seed(123)
-  sims <- t(sapply(1:200, function(na) {
+  sims <- t(sapply(1:1000, function(na) {
     fg <- simulate(fg, return_fastgllvm = TRUE)
-    as.vector(unlist(compute_dAB_centered(fg, method=method, hessian=hessian)[c("dA", "dB")]))
+    controls <- list(method=method, use_signs=use_signs)
+    as.vector(unlist(compute_dAB_centered(fg, controls=controls, hessian=hessian)[c("dA", "dB")]))
   }))
-  boxplot(sims, outline=T)
+  {
+  par(mfrow=c(2,1))
+  boxplot(sims, outline=T, main=sqrt(mean(colMeans(sims)^2)))
   points(colMeans(sims), col=2)
-  points(apply(sims,2,median), col=3)
+  abline(h=0,col=2, lty=2)
+  boxplot(sims, outline=F)
+  points(colMeans(sims), col=2)
+  abline(h=0,col=2, lty=2)
+  par(mfrow=c(1,1))
+  }
 }

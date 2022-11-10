@@ -10,9 +10,9 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
                           B = initial_values$B,
                           phi = initial_values$phi)
     rm("initial_values")
-    fg$parameters <- initialize_additional_parameters(fg, controls$method)
+    fg$parameters <- initialize_additional_parameters(fg, controls$method) # TODO: this is useless now.. check this
   } else {
-    cat("\nInitial parameters values set to those provided.")
+    cat("\nInitial parameters successfully set.")
   }
 
   fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
@@ -27,12 +27,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   params_hist <- list()
   if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
 
-  # # sign stuff
-  # signs_counts <- signs_old <- signs_new <- sign(unlist(fg$parameters[c("A", "B")])) * 0
-  # signs_boost <- 1
-  # signs_hist <- list()
-  # Beginning of the iterations
-  # ---------------------------
   ma <- fg$parameters
 
   # impute for Y
@@ -40,15 +34,14 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     fg$Y[fg$Miss] <- fg$mean[fg$Miss]
   }
 
-  for (i in 1:controls$maxit) {
-    # sign stuff
-    # signs_old <- signs_new
-    fg_old <- fg # TODO remove this..
 
-    # compute criterion after each pass...
+  # Beginning of the iterations
+  # ---------------------------
+  for (i in 1:controls$maxit) {
+
     # only update the hessian once per pass...
     if (controls$hessian) hessian <- simulate_hessian_AB(fg)
-    # TODO: compute_Z must accept linpar as argument! for starting values or whatever
+
 
 
     if (i < 20){
@@ -57,19 +50,9 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       step_size = controls$alpha*20/i
     }
 
-    # update the Hessian
-    # fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
-    # Importantly, the hessian must be computed independently from the rest
-    fg <- compute_mean(fg)  # TODO: compute mean based on fa mayhaps?
-    fg$parameters$phi <- compute_phi(fg)
-    # impute for Y
-    if(!is.null(fg$Miss)) {
-      fg$Y[fg$Miss] <- fg$mean[fg$Miss]
-    }
-    fg$deviance <- mean(compute_deviance(fg))
-    cat("\ni: ", i, "dev:", fg$deviance)
 
     warning("the hessian must be recomputed at every batch....")
+    if(!is.null(controls$H.seed)) warning("The seed is beeing reset!")
 
 
     # re-draw random batches every pass
@@ -77,29 +60,61 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
     for (batch in batches) {
       fg_batch <- subset(fg, batch)
-      dAB <- compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
 
-      # update_a <-  trim(signs * step_size *dAB$dA, controls$trim)
-      # sign_a <- sign(update_a)
-      # signs[sign(signs) == sign_a] <- signs[sign(signs) == sign_a] + sign_a[sign(signs) == sign_a]
-      # signs[sign(signs) != sign_a] <- -sign_a[sign(signs) !=sign_a]
-
-      fg$parameters$A <- fg$parameters$A - trim(step_size * dAB$dA, controls$trim)
-      if (!is.null(fg$parameters$B)) {
-        fg$parameters$B <- fg$parameters$B - trim(step_size * dAB$dB, controls$trim)
+      if (!is.null(controls$H.seed)) {
+        set.seed(controls$H.seed)
       }
-      # by the (inverse of ) Hessian
+      if (controls$H > 1) {
+        sims <- lapply(1:controls$H, function(na) {
+          compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
+        })
+        dA <- Reduce("+", lapply(sims, function(sim)sim$dA)) / length(sims)
+        dB <- Reduce("+", lapply(sims, function(sim)sim$dB)) / length(sims)
+        dphi <- Reduce("+", lapply(sims, function(sim)sim$dphi)) / length(sims)
+        covZ <- Reduce("+", lapply(sims, function(sim)sim$covZ)) / length(sims)
+      } else {
+        dAB <- compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
+        dA <- dAB$dA
+        dB <- dAB$dB
+        dphi <- dAB$dphi
+        covZ <- dAB$covZ
+      }
+
+      # updating all parameters
+      fg$parameters$A <- fg$parameters$A - trim(step_size * dA, controls$trim)
+      if (!is.null(fg$parameters$B)) {
+        fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
+      }
+
+      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi, controls$trim)
+
+      fg$parameters$covZ <- covZ
+
       if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
       # cat("\nSign:", signs)
     }
 
+    # update the Hessian
+    # fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
+    # Importantly, the hessian must be computed independently from the rest
+    fg <- compute_Z(fg, start=fg$Z, return_fastgllvm = T)
+    fg <- compute_mean(fg)  # TODO: compute mean based on ma mayhaps?
+
+    # rescale the model
+    if (controls$rescale) {
+      fg <- rescale(fg, rescale.A = T, rescale.B = T, target.cov = fg$parameters$covZ)
+    }
+
+    # fg$parameters$phi <- compute_phi(fg)
+    # impute for Y
+    if(!is.null(fg$Miss)) {
+      fg$Y[fg$Miss] <- fg$mean[fg$Miss]
+    }
+    fg$deviance <- mean(compute_deviance(fg))
+    cat("\ni: ", i, "dev:", fg$deviance)
+
+
     ma <- update_moving_average(ma, fg$parameters, 0.9)
-    # sign stuff
-    # signs_new <- sign(unlist(fg$parameters[c("A", "B")]) - unlist(fg_old$parameters[c("A", "B")]))
-    # signs_counts <- update_signs_count(signs_counts, signs_old, signs_new)
-    # if(mean(signs_counts) < 1) signs_boost <- signs_boost * .95 else signs_boost <- signs_boost * 1.05
-    # cat(" signs_boost = ", signs_boost)
-    # signs_hist <- c(signs_hist, list(signs_counts))
   }
 
 
@@ -111,10 +126,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
     }, simplify=F)
   }
-
-  # sign stuff
-  # fg$fit$signs_hist  <- do.call(rbind, signs_hist)
-
 
   fg$fit$hist <- if(controls$hist) history else NULL
   fg$controls <- controls
@@ -193,35 +204,43 @@ update_moving_average <- function(moving_average, parameters, weight) {
 if(0) {
 
   devtools::load_all()
-  poisson  <- 100
+  poisson  <- 20
   gaussian <- 0
   binomial <- 0
-  nobs <- 1000
-  q <- 1
+  nobs <- 100
+  q <- 2
   p <- poisson + gaussian + binomial
+
 
 
   intercept <- T
   k <- 1
   if(k==0 & intercept) k <- 1
 
-  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(2030)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0.3, scale=1)
 
-  set.seed(1304)
-  fit <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.05, intercept=intercept, alpha=1, hessian=T, maxit=200, use_signs = F)
-  plot(fit)
-  fit <- update(fit, alpha=fit$controls$alpha/4, maxit=20)
-  plot(fit)
-  fit$parameters$A
-  fit <- compute_mean(fit)
+  family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
+  set.seed(123045)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
+
+  set.seed(13342)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=10, rescale=F)
+  plot(fit1)
+  set.seed(13342)
+  fit2 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=10, rescale=T)
+  plot(fit2)
+  set.seed(13342)
+  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=F, maxit=1000, use_signs = T, H=1, rescale=F)
+  plot(fit3)
+
+  # fit <- update(fit, H=100, H.seed=1231, alpha=.1, maxit=10)
+  # plot(fit)
 
   library(gmf)
   fit.gmf <- gmf(fg$Y, family=poisson(), p=q, intercept = T)
 
+  fit <- fit2
   fit <- compute_mean(fit)
-  plot(fg$Y, fit$mean, ylim=c(0, 120))
+  plot(fg$Y, fit$mean)
   points(fg$Y, fit.gmf$fit, col=2)
   abline(0,1,col=2)
 
@@ -232,16 +251,16 @@ if(0) {
   mean(compute_deviance(fit2))
 
 
-
-
-  plot(fit)
-  plot(fg$parameters$A, psych::Procrustes(fit$parameters$A, fg$parameters$A)$loadings, col=1)
-  points(fg$parameters$B, fit$parameters$B, pch=2, col=1)
-  points(fg$parameters$phi, fit$parameters$phi, pch=3, col=1)
+  plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
   abline(0,1,col=2)
+  points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
+  points(fg$parameters$B, fit1$parameters$B, pch=2, col=1)
+  points(fg$parameters$phi, fit1$parameters$phi, pch=3, col=1)
 
-  points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=2)
-  points(fg$parameters$B, t(fit.gmf$beta), col=2)
+
+  points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=4)
+  points(fg$parameters$B, t(fit.gmf$beta), col=4)
   plot(fg$Z, fit$Z); abline(0,-1,col=2); abline(0,1,col=2)
   points(fg$Z, -fit.gmf$u, col=2)
 

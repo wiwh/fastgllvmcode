@@ -21,13 +21,14 @@ plot.fastgllvm <- function(f){
     stop("Fit the model before attempting to plot.")
   }
   plot_id <- 1:min(100, f$dimensions$p*f$dimensions$q)
-  par(mfrow=c(3,1))
+  par(mfrow=c(2,2))
   ts.plot(f$fit$hist$A[,plot_id], main="Convergence plot: loadings.", xlab="Iteration", col=plot_id, lwd=2)
   points(rep(nrow(f$fit$hist$A), length(plot_id)), as.vector(f$parameters$A)[plot_id], col=plot_id)
   if(!is.null(f$fit$hist$B)) {
     ts.plot(f$fit$hist$B[,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
   }
   ts.plot(f$fit$hist$phi[,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
+  ts.plot(f$fit$hist$covZ, main = "Convergence plot: covZ.", xlab="Iteration", col=1:f$dimensions$q**2, lwd=2)
   par(mfrow=c(1,1))
 }
 
@@ -82,6 +83,7 @@ simulate.fastgllvm <- function(fastgllvm, nsim=1, conditional=F, return_fastgllv
     fastgllvm$Z <- simu$Z
     fastgllvm$linpar <- simu$linpar
     fastgllvm$mean <- NULL
+    fastgllvm$Miss <- NULL
     return(fastgllvm)
   } else {
     return(simu)

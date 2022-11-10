@@ -5,6 +5,7 @@ initialize_additional_parameters <- function(fg, method) {
     fg$parameters$covZ <- cov(fg$Z)
   }
   if (method == "simple") {
+    fg$parameters$covZ <- cov(fg$Z)
   }
   fg$parameters
 }
@@ -243,41 +244,38 @@ initialize_parameters_delete <- function(fastgllvm, target=NULL, rescale=F) {
 # if rescale.B is an integer j>0 corresponding to the intercept column of the design matrix X, then rescale B to absorb the intercept
 # if both rescale.A and rescale.B are True, the linpar will be the same after the rescaling. This behavior is tested below.
 rescale <- function(fg, rescale.A = F, rescale.B = F, target.cov=NULL) {
-  parameters <- fg$parameters
-  parameters$Z <- fg$Z
-  Z <- scale(parameters$Z, scale=F)
-  b <- matrix(attr(Z, "scaled:center"), nrow=1)
+  with(fg, {
+    Z <- scale(Z, scale=F)
+    b <- matrix(attr(Z, "scaled:center"), nrow=1)
 
-  if (is.null(target.cov)) {
-    C <- chol((t(Z) %*% Z)/nrow(Z))
-    Cneg <- solve(C)
-    Z <- Z %*% Cneg
+    if (is.null(target.cov)) {
+      C <- chol((t(Z) %*% Z)/nrow(Z))
+      Cneg <- solve(C)
+      Z <- Z %*% Cneg
+    } else {
+      Z.c <- chol((t(Z) %*% Z)/nrow(Z))
+      target.c <- chol(target.cov)
+      C <- solve(target.c) %*% Z.c
+      Cneg <- solve(Z.c) %*% target.c
+      Z <- Z %*% Cneg
+    }
 
-  } else {
-    Z.c <- chol((t(Z) %*% Z)/nrow(Z))
-    target.c <- chol(target.cov)
-    C <- solve(target.c) %*% Z.c
-    Cneg <- solve(Z.c) %*% target.c
-    Z <- Z %*% Cneg
-  }
+    # must appear before parameters$A is rescaled
+    if(rescale.B) {
+      parameters$B[,rescale.B] <- parameters$B[,rescale.B]  + as.vector(parameters$A %*% t(b))
+    }
+    if (rescale.A) {
+      parameters$A <- parameters$A %*% t(C)
+    }
+    # add the rescaled bias (p.137 in blue notebook)
+    if(!rescale.B) {
+      Z <- t(t(Z) + as.vector(b %*% Cneg))
+    }
 
-  # must appear before parameters$A is rescaled
-  if(rescale.B) {
-    parameters$B[,rescale.B] <- parameters$B[,rescale.B]  + as.vector(parameters$A %*% t(b))
-  }
-  if (rescale.A) {
-    parameters$A <- parameters$A %*% t(C)
-  }
-  # add the rescaled bias (p.137 in blue book)
-  if(!rescale.B) {
-    Z <- t(t(Z) + as.vector(b %*% Cneg))
-  }
-  parameters$Z <- Z
-
-  fg$Z <- parameters$Z
-  parameters$Z <- NULL
-  fg$parameters <- parameters
-  fg
+    fg$Z <- Z
+    fg$parameters <- parameters
+    fg
+  })
 }
 
 # Recenter Z,
