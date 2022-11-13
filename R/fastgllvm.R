@@ -1,4 +1,4 @@
-#' Fit a fastgllvm
+#' Fit a gllvm using an M-estimator and stochatic approximation algorithm.
 #' @param Y: a `n` times `p` matrix of observations
 #' @param q: the number of factors
 #' @param family: specifies the families. See below for more information.

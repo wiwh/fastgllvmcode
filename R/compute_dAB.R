@@ -26,35 +26,85 @@ compute_dAB_centered <- function(fg, controls, hessian) {
   # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
   fg <- compute_mean(fg)
 
+  # experimental vvvvv
+  if (controls$method=="approx") {
+    fg_simulated <- fg
+    fg_simulated$Z <- scale(gen_Z(fg$dim$n, fg$dimensions$q), scale=F)
+    fg_simulated <- compute_mean(fg_simulated)
 
-  # Simulate a sample
-  fg_simulated <- simulate(fg, return_fastgllvm=T)
-  fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
-  fg_simulated <- compute_mean(fg_simulated)
+    dAB <- t(fg_simulated$mean) %*% cbind(fg_simulated$Z, fg_simulated$X) -t(fg$Y) %*% cbind(fg$Z, fg$X)
+    dAB <- AB_separate(dAB, fg$dimensions)
+    # these are placeholders
+    dphi <- rep(0, fg$dimensions$p)
+    covZ <- diag(1, fg$dimensions$q)
 
-  # Compute the centered gradients on both the sample and simulated fastgllvm objects
-  dAB_sample <- compute_dAB(fg, controls$method)
-  dAB_simulated <- compute_dAB(fg_simulated, controls$method)
+  # experimental ^^^^^
+  # experimental vvvvv
+  } else if (controls$method == "rescaled") {
+    # Simulate a sample
+    fg_simulated <- simulate(fg, return_fastgllvm=T)
+    fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
+
+    # fg_simulated_rescaled <- rescale(fg_simulated, rescale.A = FALSE, rescale.B = FALSE, target.cov = )
+    fg_simulated_rescaled <- fg_simulated
+    fg_simulated_rescaled <- compute_mean(fg_simulated_rescaled)
+
+    # Compute the centered gradients on both the sample and simulated fastgllvm objects
+      fg_rescaled <- rescale(fg, rescale.A= FALSE, rescale.B= TRUE, target.cov = cov(fg_simulated$Z))
+    fg_rescaled <- compute_mean(fg_rescaled)
+
+    dAB_sample <- compute_dAB(fg_rescaled, controls$method)
+    dAB_simulated <- compute_dAB(fg_simulated_rescaled, controls$method)
 
 
-  if (is.null(hessian)) {
-    dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
+    if (is.null(hessian)) {
+      dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
+    } else {
+      dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
+    }
+
+    if (controls$use_signs) {
+      dAB <- sign(dAB)
+    }
+    dAB <- AB_separate(dAB, fg$dimensions)
+
+    dphi_sample <- compute_phi(fg_rescaled)
+    dphi_simulated <- compute_phi(fg_simulated_rescaled)
+
+    dphi <- dphi_simulated - dphi_sample
+
+  # experimental ^^^^^
   } else {
-    dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
+    # Simulate a sample
+    fg_simulated <- simulate(fg, return_fastgllvm=T)
+    fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
+    fg_simulated <- compute_mean(fg_simulated)
+
+    # Compute the centered gradients on both the sample and simulated fastgllvm objects
+    dAB_sample <- compute_dAB(fg, controls$method)
+    dAB_simulated <- compute_dAB(fg_simulated, controls$method)
+
+
+    if (is.null(hessian)) {
+      dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
+    } else {
+      dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
+    }
+
+    if (controls$use_signs) {
+      dAB <- sign(dAB)
+    }
+    dAB <- AB_separate(dAB, fg$dimensions)
+
+    dphi_sample <- compute_phi(fg)
+    dphi_simulated <- compute_phi(fg_simulated)
+
+    dphi <- dphi_simulated - dphi_sample
   }
 
-  if (controls$use_signs) {
-    dAB <- sign(dAB)
-  }
-
-  dAB <- AB_separate(dAB, fg$dimensions)
-
-  dphi_sample <- compute_phi(fg)
-  dphi_simulated <- compute_phi(fg_simulated)
-
-  dphi <- dphi_simulated - dphi_sample
 
   # dcovZ <- cov(fg$Z) - cov(fg_simulated$Z)
+
 
   # TODO: compare to the old method below, they need to get the same thing!!
   list(dA = dAB$A, dB=dAB$B, fg=fg, covZ=cov(fg_simulated$Z), dphi=dphi)#, dcovZ=dcovZ)
@@ -72,6 +122,12 @@ compute_dAB <- function(fg, method) {
     if ( method == "simple" ) {
       dAB <- t(Y) %*% (ZX/dimensions$n)
     } else if (method == "full") {
+      dAB <- t(Y - mean) %*% (ZX/dimensions$n)
+    } else if (method == "approx") {
+      dAB <- t(mean) %*% ZX /dimensions$n
+
+    # TODO: remove the method
+    } else if (method == "rescaled") {
       dAB <- t(Y - mean) %*% (ZX/dimensions$n)
     } else {
       stop ("Unkown method `method`")
