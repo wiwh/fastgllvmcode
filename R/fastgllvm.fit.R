@@ -12,18 +12,18 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
                           covZ = cov(fg$Z))
     rm("initial_values")
     fg$parameters <- initialize_additional_parameters(fg, controls$method) # TODO: this is useless now.. check this
+    fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
   } else {
     cat("\nInitial parameters successfully set from the supplied model.")
   }
 
-  fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
 
-  gradients <- initialize_gradients(fg$parameters)
-  if (controls$hessian) {
-    hessian <- simulate_hessian_AB(fg)
-  } else {
-    hessian <- NULL
-  }
+  # gradients <- initialize_gradients(fg$parameters)
+  # if (controls$hessian) {
+  #   hessian <- simulate_hessian_AB(fg)
+  # } else {
+  #   hessian <- NULL
+  # }
 
   params_hist <- list()
   if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
@@ -87,7 +87,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
         fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
       }
 
-      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi, controls$trim)
+      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi*.1, controls$trim)
 
       fg$parameters$covZ <- covZ
 
@@ -208,9 +208,9 @@ if(0) {
   devtools::load_all()
   poisson  <- 0
   gaussian <- 0
-  binomial <- 200
-  nobs <- 1000
-  q <- 4
+  binomial <- 4
+  nobs <- 10000
+  q <- 1
   p <- poisson + gaussian + binomial
 
 
@@ -221,7 +221,7 @@ if(0) {
 
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(100790)
+  set.seed(1234526)
   fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
 
   # # rescaling inside the loop: needs to add the effect of the rescaling.... anyway it only affects the main since there is no rescaling on the simulation since we take the scaling factor there!
@@ -239,34 +239,38 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loop
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=50, use_signs = F, H=1, rescale=T)
   plot(fit2)
-  # fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha*2, trim=fit2$controls$trim*2, H=1, maxit=200)
-  for(i in 1:5) {
-    fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha/2, trim=fit2$controls$trim/2, H=i, maxit=10)
-    plot(fit2)
-  }
+  fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha/2, maxit=20)
+  plot(fit2)
+  # for(i in 1:5) {
+  #   fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha/2, trim=fit2$controls$trim/2, H=i, maxit=10)
+  #   plot(fit2)
+  # }
 
   plot(fg$Y, fit2$mean)
   abline(0,1,col=2)
 
   # simple, without rescaling
   set.seed(13342)
-  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   plot(fit3)
-  for(i in 1:5) {
-    fit3 <- update(fit3, H=i, alpha=fit3$controls$alpha/2, trim=fit3$controls$trim/2, H=i, maxit=10)
-    plot(fit3)
-  }
+  fit3 <- update(fit3, H=20, maxit=20)
+  plot(fit3)
+  # for(i in 1:5) {
+  #   fit3 <- update(fit3, H=i, alpha=fit3$controls$alpha/2, trim=fit3$controls$trim/2, H=i, maxit=10)
+  #   plot(fit3)
+  # }
 
   # Approx for large p
   set.seed(1334)
   fit4 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
+  fit4 <- update(fit4, H=20)
   plot(fit4)
-  for(i in 1:5) {
-    fit4 <- update(fit4, trim=fit4$controls$trim/1.5, H=i, maxit=10)
-    plot(fit4)
-  }
+  # for(i in 1:5) {
+  #   fit4 <- update(fit4, trim=fit4$controls$trim/1.5, H=i, maxit=10)
+  #   plot(fit4)
+  # }
 
   # fit <- update(fit, H=100, H.seed=1231, alpha=.1, maxit=10)
   # plot(fit)
@@ -274,7 +278,8 @@ if(0) {
   fit.gllvm <- gllvm(y = fg$Y, X= fg$X, num.lv = q, formula = ~0 + ., family=binomial(), method = "EVA", sd.errors=F)
 
   library(mirtjml)
-  fit.mirtjml <- mirtjml::mirtjml_expr(fg$Y, K=q, tol = 1e-1)
+  fit.mirtjml <- mirtjml::mirtjml_expr(fg$Y, K=q, tol = .01)
+  compute_error(fit.mirtjml$A_hat, fg$parameters$A)
 
   library(gmf)
   fit.gmf <- gmf(fg$Y, family=binomial(), p=q, intercept = T)
@@ -283,12 +288,6 @@ if(0) {
   if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
   if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
 
-
-  fit <- fit2
-  fit <- compute_mean(fit)
-
-  fit.gmf.dev <- fit
-  fit.gmf.dev$mean <- fit.gmf$fit
 
   mean(compute_deviance(fit))
   mean(compute_deviance(fit.gmf.dev))
@@ -300,10 +299,9 @@ if(0) {
   # points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
   # points(fg$parameters$B, fit1$parameters$B, pch=2, col=1)
 
-  plot(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=1)
-  abline(0,1,col=2)
-  points(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=2)
+  plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
   points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  abline(0,1,col=2)
   points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
   points(fg$parameters$A, psych::Procrustes(fit4$parameters$A, fg$parameters$A)$loadings, col=4)
   points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=5)
@@ -311,7 +309,7 @@ if(0) {
   # points(fg$parameters$B, fit$parameters$B, pch=2, col=1)
   points(fg$parameters$A, psych::Procrustes(fit.mirtjml$A_hat, fg$parameters$A)$loadings, col=3)
   # points(fg$parameters$B, t(fit.gmf$beta), col=4)
-  compute_error(fit0$parameters$A, fg$parameters$A)
+  # compute_error(fit0$parameters$A, fg$parameters$A)
   compute_error(fit1$parameters$A, fg$parameters$A)
   compute_error(fit2$parameters$A, fg$parameters$A)
   compute_error(fit3$parameters$A, fg$parameters$A)

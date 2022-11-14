@@ -73,6 +73,8 @@ compute_dAB_centered <- function(fg, controls, hessian) {
 
     dphi <- dphi_simulated - dphi_sample
 
+    covZ <- cov(fg_simulated$Z)
+
   # experimental ^^^^^
   } else {
     # Simulate a sample
@@ -100,6 +102,8 @@ compute_dAB_centered <- function(fg, controls, hessian) {
     dphi_simulated <- compute_phi(fg_simulated)
 
     dphi <- dphi_simulated - dphi_sample
+
+    covZ <- cov(fg_simulated$Z)
   }
 
 
@@ -107,7 +111,7 @@ compute_dAB_centered <- function(fg, controls, hessian) {
 
 
   # TODO: compare to the old method below, they need to get the same thing!!
-  list(dA = dAB$A, dB=dAB$B, fg=fg, covZ=cov(fg_simulated$Z), dphi=dphi)#, dcovZ=dcovZ)
+  list(dA = dAB$A, dB=dAB$B, fg=fg, covZ=covZ, dphi=dphi)#, dcovZ=dcovZ)
 }
 
 

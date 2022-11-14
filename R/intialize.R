@@ -239,7 +239,7 @@ initialize_parameters_delete <- function(fastgllvm, target=NULL, rescale=F) {
   })
 }
 
-# rescale Z to have target.cov empirical variance
+# Rescale Z to have a given first and second moments; change (possibly) all parameters accordingly so that the means remain unchanged.
 # if rescale.A is TRUE, also rescale A
 # if rescale.B is an integer j>0 corresponding to the intercept column of the design matrix X, then rescale B to absorb the intercept
 # if both rescale.A and rescale.B are True, the linpar will be the same after the rescaling. This behavior is tested below.

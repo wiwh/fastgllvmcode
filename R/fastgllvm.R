@@ -1,5 +1,5 @@
-#' Fit a gllvm using an M-estimator and stochatic approximation algorithm.
-#' @param Y: a `n` times `p` matrix of observations
+#' Fit a GLLVM using an M-estimator a stochatic approximation algorithm.
+#' @param Y: a `n` times `p` matrix, organized with the observations in the rows and the responses in the columns
 #' @param q: the number of factors
 #' @param family: specifies the families. See below for more information.
 #' @param X: either `NULL` or a `n` timeis `k` matrix of covariates.
