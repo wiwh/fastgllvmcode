@@ -30,7 +30,7 @@ ffa_gen_Psi <- function(p) {
 
 #' Computes the maximum likelihood estimator for factor analysis
 #' @export
-ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_update_Psi = F){
+ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_update_Psi = T){
   stopifnot(is.matrix(Y))
 
   Miss <- ffa_get_Miss(Y)
@@ -43,6 +43,11 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
   Psi <- rep(1, p)
   if (savepath) path <- list()
 
+  if (!is.null(Miss)) {
+    Y[Miss] <- 0
+  }
+
+
   for (i in 1:maxiter) {
     Psi.old <- Psi
     Zdat <- ffa_est_Z(Y, A, Psi, Miss)
@@ -51,11 +56,23 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
 
     if(iteratively_update_Psi) Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
 
+    if (!is.null(Miss)) {
+      # TODO: this is extremely inefficient (computing the whole matrix just for a few missing value)... do this better
+      Y[Miss] <- (Z %*% t(A))[Miss]
+    }
+
     if (savepath) {
       path[[i]] <- list(A = as.vector(A), Psi = Psi)
     }
+
+    if (iteratively_update_Psi) {
+      crit <- sum(Psi - Psi.old)^2 / sum(Psi^2 + Psi.old^2)
+    } else {
+      crit <- eps + 1
+    }
+    if ((i > 4) && crit < eps) break()
   }
-  Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
+  if(!iteratively_update_Psi) Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
 
   if (savepath) {
     path <- sapply(c("A", "Psi"), function(est) {
@@ -66,6 +83,8 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
 }
 
 ffa_est_Z <- function(Y, A, Psi, Miss=NULL){
+  # For now we estimate missing values by iterative imputation, but this should be better:
+  Miss <- NULL
   if (!is.null(Miss)) {
     Y[Miss] <- 0
     # this is the same as ignoring the missing values for each Y[i,]:
@@ -76,7 +95,8 @@ ffa_est_Z <- function(Y, A, Psi, Miss=NULL){
   Z <- Y %*% K
 
   if (!is.null(Miss)) {
-    Z <- scale(Z, scale=F) # TODO: think of this
+    Z <- (Y / (rowMeans(!Miss))) %*% K
+    Z <- scale(Z, scale=F) # TODO: think of this...
   }
 
   SZZ <- t(Z) %*% Z/nrow(Z)
@@ -96,6 +116,9 @@ ffa_est_Z <- function(Y, A, Psi, Miss=NULL){
 }
 
 ffa_est_A <- function(Y, Z, covZ=NULL, covZ.neg = NULL, Miss=NULL){
+  # For now we estimate missing values by iterative imputation, but this should be better:
+  Miss <- NULL
+
   n <- nrow(Y)
   p <- ncol(Y)
   q <- ncol(Z)
@@ -135,6 +158,9 @@ ffa_est_A <- function(Y, Z, covZ=NULL, covZ.neg = NULL, Miss=NULL){
 
 
 ffa_est_Psi <- function(Y_vars, A, Miss, Z, Y) {
+  # For now we estimate missing values by iterative imputation, but this should be better:
+  Miss <- NULL
+
   if(is.null(Miss)) {
     Psi <- Y_vars - rowSums(A^2) #*colMeans(!Miss)
   } else {
