@@ -30,7 +30,7 @@ ffa_gen_Psi <- function(p) {
 
 #' Computes the maximum likelihood estimator for factor analysis
 #' @export
-ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_update_Psi = T){
+ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_update_Psi = T, rotate_updates = F){
   stopifnot(is.matrix(Y))
 
   Miss <- ffa_get_Miss(Y)
@@ -50,6 +50,7 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
 
   for (i in 1:maxiter) {
     Psi.old <- Psi
+    A.old <- A
     Zdat <- ffa_est_Z(Y, A, Psi, Miss)
     Z <- Zdat$Z
     A <- ffa_est_A(Y, Z, covZ=Zdat$covZ, covZ.neg = Zdat$covZ.neg, Miss)
@@ -71,6 +72,7 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
       crit <- eps + 1
     }
     if ((i > 4) && crit < eps) break()
+    if (rotate_updates) A <- varimax(A)$loadings
   }
   if(!iteratively_update_Psi) Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
 
