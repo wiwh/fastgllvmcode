@@ -55,21 +55,21 @@ ffa <- function(Y, q, maxiter=100, eps=1e-4, savepath=F, verbose=T, iteratively_
     Z <- Zdat$Z
     A <- ffa_est_A(Y, Z, covZ=Zdat$covZ, covZ.neg = Zdat$covZ.neg, Miss)
 
-    if(iteratively_update_Psi) Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
-
     if (!is.null(Miss)) {
       # TODO: this is extremely inefficient (computing the whole matrix just for a few missing value)... do this better
       Y[Miss] <- (Z %*% t(A))[Miss]
     }
 
-    if (savepath) {
-      path[[i]] <- list(A = as.vector(A), Psi = Psi)
-    }
 
     if (iteratively_update_Psi) {
+      Psi <- ffa_est_Psi(Y_vars, A, Miss, Z)
       crit <- sum(Psi - Psi.old)^2 / sum(Psi^2 + Psi.old^2)
     } else {
       crit <- eps + 1
+    }
+
+    if (savepath) {
+      path[[i]] <- list(A = as.vector(A), Psi = Psi)
     }
     if ((i > 4) && crit < eps) break()
     if (rotate_updates) A <- varimax(A)$loadings
@@ -143,7 +143,7 @@ ffa_est_A <- function(Y, Z, covZ=NULL, covZ.neg = NULL, Miss=NULL){
     # }))
 
     if (n < p) {
-      A <- ((t(Y)/colSums(!Miss)) %*% Z) %*% (covZ.neg)
+      A <- ((t(Y)/colSums(!Miss)) %*% Z)# %*% (covZ.neg)
     } else {
       A <- (t(Y)/colSums(!Miss)) %*% (Z %*% (covZ.neg))
     }
@@ -189,7 +189,7 @@ ffa_get_Miss <- function(Y) {
 
 ffa_comp_Y_vars <- function (Y, Miss) {
   if (!is.null(Miss)){
-    colMeans(Y^2, na.rm=T)
+    colSums(Y^2, na.rm=T) / (nrow(Y)- 1) # TODO: think
   } else {
     colMeans(Y^2)
   }
@@ -210,20 +210,29 @@ ffa_error <- function(A, target, rotate=F){
   norm(A-target, "F")/(norm(A, "F") + norm(target, "F"))
 }
 
+compute_FFA_error <- function(Y, A, Psi) {
+  K <- ffa_comp_K(A, Psi)
+  SK <- t(Y) %*% (Y %*% K)/nrow(Y)
+  EK <- A %*% (t(A) %*% K) + K * Psi
+  norm(EK-SK, type = "F")/norm(EK, type="F")
+}
+
 if(0){
-  n <- 1000
-  p <- 100
-  q <- 10
+  n <- 100
+  p <- 1000
+  q <- 5
 
   dat <- ffa_gen_Y(n, p, q)
 
   Y <- dat$Y
-  Y[runif(prod(dim(Y)))<.5] <- NA
-  fit <- ffa(Y, q, savepath = T, verbose=T, maxiter=5, eps=1e-5, iteratively_update_Psi = 2)
+  # Y <- scale(Y, scale=T)
+  fit <- ffa(Y, 5, savepath = T, verbose=T, maxiter=5, eps=-1, rotate_updates = F, iteratively_update_Psi = T)
 
   ts.plot(fit$path$A[,1:100])
+  ts.plot(fit$path$Psi[,1:100])
+
+  compute_FFA_error(Y, fit$A, fit$Psi)
 
   plot(dat$A[1:1000], psych::Procrustes(fit$A, dat$A)$loadings[1:1000]); abline(0,1,col=2)
 
-  ffa_ffa_error(dat$A, fit$A, rotate = T)
 }

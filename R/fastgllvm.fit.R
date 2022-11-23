@@ -207,10 +207,10 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 0
-  binomial <- 4
-  nobs <- 10000
-  q <- 1
+  gaussian <- 1000
+  binomial <- 0
+  nobs <- 100
+  q <- 5
   p <- poisson + gaussian + binomial
 
 
@@ -221,8 +221,44 @@ if(0) {
 
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(1234526)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
+  set.seed(120)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
+  fg$Y <- scale(fg$Y, scale=F)
+  sds <- sqrt(colMeans(fg$Y^2))
+
+  fit.fad <- fad::fad(fg$Y, factors = 10)
+  fit.ffa <- ffa(fg$Y, 10, maxiter = 100, eps=1e-10, savepath = T)
+
+  compute_FFA_error(fg$Y, fit.fad$loadings * sds, fit.fad$uniquenesses*sds^2)
+  compute_FFA_error(fg$Y, fit.ffa$A, fit.ffa$Psi)
+
+  ts.plot(fit.ffa$path$Psi)
+
+  compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
+  compute_error(fit1$loadings  * sds, fg$parameters$A)
+  compute_error(fit2$A, fg$parameters$A)
+
+  sims <- sapply(1:10, function(na) {
+    set.seed(213131+na)
+    fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi = runif(p, .2, .8))
+    sds <- apply(fg$Y, 2, sd)
+    fit1 <- fad::fad(fg$Y, factors = q)
+    fit2 <- ffa(fg$Y, q, maxiter = 20, eps=1e-5, savepath = T)
+    cat("\n", fit2$niter)
+    compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
+  })
+
+  hist(sims)
+
+  mbm <- microbenchmark::microbenchmark(fad::fad(fg$Y, factors = 10), ffa(fg$Y, 10, maxiter = 100, eps=1e-5, savepath = T), times=10)
+
+  plot(fg$parameters$A, psych::Procrustes(fit1$loadings*sds, fg$parameters$A)$loadings, col=1)
+  points(fg$parameters$A, psych::Procrustes(fit2$A, fg$parameters$A)$loadings, col=2)
+  abline(0,1,col=3)
+
+
+  mean((fit1$uniquenesses*sds - 1)^2)
+  mean((fit2$Psi - 1)^2)
 
   # # rescaling inside the loop: needs to add the effect of the rescaling.... anyway it only affects the main since there is no rescaling on the simulation since we take the scaling factor there!
   # # ok for rescaling!
@@ -235,13 +271,14 @@ if(0) {
   # full, with hessian, no rescaling
   set.seed(13342)
   fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
   # clear winner in poisson
   # full, with rescaling outside the loop
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=50, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   plot(fit2)
-  fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha/2, maxit=20)
+  fit2 <- update(fit2, H=1, alpha=fit2$controls$alpha, maxit=20)
   plot(fit2)
   # for(i in 1:5) {
   #   fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha/2, trim=fit2$controls$trim/2, H=i, maxit=10)
@@ -253,7 +290,7 @@ if(0) {
 
   # simple, without rescaling
   set.seed(13342)
-  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   plot(fit3)
   fit3 <- update(fit3, H=20, maxit=20)
   plot(fit3)
@@ -282,7 +319,7 @@ if(0) {
   compute_error(fit.mirtjml$A_hat, fg$parameters$A)
 
   library(gmf)
-  fit.gmf <- gmf(fg$Y, family=binomial(), p=q, intercept = T)
+  fit.gmf <- gmf(fg$Y,X = fg$X, family=poisson(), p=q, intercept = F)
 
   library(ltm)
   if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
@@ -300,7 +337,8 @@ if(0) {
   # points(fg$parameters$B, fit1$parameters$B, pch=2, col=1)
 
   plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
-  points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  plot(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  points(fg$parameters$B, fit2$parameters$B, col=3)
   abline(0,1,col=2)
   points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
   points(fg$parameters$A, psych::Procrustes(fit4$parameters$A, fg$parameters$A)$loadings, col=4)
