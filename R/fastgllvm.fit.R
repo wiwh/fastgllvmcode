@@ -40,9 +40,8 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # ---------------------------
   for (i in 1:controls$maxit) {
 
-    # only update the hessian once per pass...
     if (controls$hessian) hessian <- simulate_hessian_AB(fg)
-
+    warning("the hessian must be recomputed at every batch....")
 
 
     if (i < 20){
@@ -51,10 +50,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       step_size = controls$alpha*20/i
     }
 
-
-    warning("the hessian must be recomputed at every batch....")
-    if(!is.null(controls$H.seed)) warning("The seed is beeing reset!")
-
+    if(!is.null(controls$H.seed)) warning("The seed is beeing reset! This corresponds to the sample path method, not the SA method.")
 
     # re-draw random batches every pass
     batches <- initialize_batches(fg$dimensions$n, controls$batch_size)
@@ -91,7 +87,10 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
       fg$parameters$covZ <- covZ
 
-      if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
+      if(controls$hist) {
+        if(length(params_hist) > 50) params_hist[[1]] <- NULL
+        params_hist <- c(params_hist, list(fg$parameters))
+      }
       # cat("\nSign:", signs)
     }
 
@@ -118,7 +117,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
     ma <- update_moving_average(ma, fg$parameters, 0.9)
   }
-
 
   fg$parameters <- ma
   fg <- compute_mean(fg)
@@ -150,66 +148,13 @@ update_moving_average <- function(moving_average, parameters, weight) {
   }, simplify=F)
 }
 
-#
-#   moving_average <- parameters
-#   crit <- Inf
-#
-#   if(is.null(controls$learning_rate.args)) controls$learning_rate.args <- list(method="spall", rate=2, end=.1)
-#   if(is.null(controls$learning_rate.args$method)) controls$learning_rate.args$method <- "spall"
-#   if(is.null(controls[["learning_rate"]])) controls$learning_rate <- initialize_learning_rate(maxit=controls$maxit, learning_rate.args = controls$learning_rate.args)
-#
-#   for(i in 1:controls$maxit){
-#     # if(i < controls$maxit/2) median <- .5 else median <- F
-#     moving_average_old <- moving_average
-#     gradients_old <- gradients
-#     # get the gradient
-#
-#     gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
-#
-#     # exponential smoothing step
-#     # for (par in names(parameters)) {
-#     #   gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
-#     # }
-#     parameters <- update_parameters(parameters, gradients, alpha=controls$alpha, learning_rate_i = controls$learning_rate(i), median=median)
-#
-#     # We track a moving average of the last 1/controls$ma iterates
-#     for(k in seq_along(parameters)){
-#       moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * parameters[[k]]
-#     }
-#
-#     if(i == 1 || i%%10 == 0 || i == controls$maxit){
-#       crit <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
-#       cat("\n Iteration: ", i, " - crit: ", crit)
-#     }
-#     if(hist) params_hist <- c(params_hist, list(parameters))
-#     if(i >= controls$minit && crit < controls$eps) break()
-#   }
-#
-#   if(hist){
-#     history <- sapply(names(parameters), function(par_name) {
-#       do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
-#     }, simplify=F)
-#   }
-#
-#   # Update the fastgllvm object
-#   fg$parameters <- moving_average
-#   fg$fit <- list(
-#     crit = crit,
-#     controls = controls,
-#     hist = if(hist) history else NULL
-#   )
-#   fg$converged <- ifelse(crit < controls$eps, T, F)
-#   fg
-# }
-
-
 if(0) {
 
   devtools::load_all()
   poisson  <- 0
   gaussian <- 0
-  binomial <- 4
-  nobs <- 10000
+  binomial <- 10
+  nobs <- 1000
   q <- 1
   p <- poisson + gaussian + binomial
 
@@ -221,35 +166,61 @@ if(0) {
 
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(1234526)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1)
+  set.seed(120)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
 
-  # # rescaling inside the loop: needs to add the effect of the rescaling.... anyway it only affects the main since there is no rescaling on the simulation since we take the scaling factor there!
-  # # ok for rescaling!
-  # set.seed(13342)
-  # fit0 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="rescaled", batch_size=1000, trim=.1, intercept=intercept, alpha=.5, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
-  #
-  # plot(fit0)
+  if(0) {
+  fg$Y <- scale(fg$Y, scale=F)
+  sds <- sqrt(colMeans(fg$Y^2))
+  # this is for gaussian variables
+  fit.fad <- fad::fad(fg$Y, factors = 10)
+  fit.ffa <- ffa(fg$Y, 10, maxiter = 100, eps=1e-10, savepath = T)
 
+  compute_FFA_error(fg$Y, fit.fad$loadings * sds, fit.fad$uniquenesses*sds^2)
+  compute_FFA_error(fg$Y, fit.ffa$A, fit.ffa$Psi)
+
+  ts.plot(fit.ffa$path$Psi)
+
+  compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
+  compute_error(fit1$loadings  * sds, fg$parameters$A)
+  compute_error(fit2$A, fg$parameters$A)
+
+  sims <- sapply(1:10, function(na) {
+    set.seed(213131+na)
+    fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi = runif(p, .2, .8))
+    sds <- apply(fg$Y, 2, sd)
+    fit1 <- fad::fad(fg$Y, factors = q)
+    fit2 <- ffa(fg$Y, q, maxiter = 20, eps=1e-5, savepath = T)
+    cat("\n", fit2$niter)
+    compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
+  })
+
+  hist(sims)
+
+  mbm <- microbenchmark::microbenchmark(fad::fad(fg$Y, factors = 10), ffa(fg$Y, 10, maxiter = 100, eps=1e-5, savepath = T), times=10)
+
+  plot(fg$parameters$A, psych::Procrustes(fit1$loadings*sds, fg$parameters$A)$loadings, col=1)
+  points(fg$parameters$A, psych::Procrustes(fit2$A, fg$parameters$A)$loadings, col=2)
+  abline(0,1,col=3)
+
+
+  mean((fit1$uniquenesses*sds - 1)^2)
+  mean((fit2$Psi - 1)^2)
+  }
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=200, use_signs = F, H=1, rescale=F)
+  plot(fit1)
+  fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
   # clear winner in poisson
   # full, with rescaling outside the loop
   set.seed(13342)
   fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=50, use_signs = F, H=1, rescale=T)
   plot(fit2)
-  fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha/2, maxit=20)
+  fit2 <- update(fit2, H=10, maxit=10)
   plot(fit2)
-  # for(i in 1:5) {
-  #   fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha/2, trim=fit2$controls$trim/2, H=i, maxit=10)
-  #   plot(fit2)
-  # }
-
-  plot(fg$Y, fit2$mean)
-  abline(0,1,col=2)
 
   # simple, without rescaling
   set.seed(13342)
@@ -265,7 +236,11 @@ if(0) {
   # Approx for large p
   set.seed(1334)
   fit4 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
-  fit4 <- update(fit4, H=20)
+  plot(fit4)
+  for(i in 1:10) {
+    fit4 <- update(fit4, trim = fit4$controls$trim/2, H=10, maxit=10)
+    plot(fit4)
+  }
   plot(fit4)
   # for(i in 1:5) {
   #   fit4 <- update(fit4, trim=fit4$controls$trim/1.5, H=i, maxit=10)
@@ -282,15 +257,13 @@ if(0) {
   compute_error(fit.mirtjml$A_hat, fg$parameters$A)
 
   library(gmf)
-  fit.gmf <- gmf(fg$Y, family=binomial(), p=q, intercept = T)
+  fit.gmf <- gmf(fg$Y,X = fg$X, family=binomial(), p=q, intercept = F)
 
   library(ltm)
   if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
   if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
 
 
-  mean(compute_deviance(fit))
-  mean(compute_deviance(fit.gmf.dev))
 
 
   # plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
