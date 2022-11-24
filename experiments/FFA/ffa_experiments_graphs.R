@@ -20,7 +20,7 @@ r5 <- readRDS("./experiments/FFA/sims_speed_fad_5.rds") %>% extract_info()
 s <- rbind(r3, r5)
 
 s <- s %>% mutate(npq= paste0("n = ", n, ", p = ", p)) %>%
-  mutate(Speed-up=time.fad.elapsed/time.ffa.elapsed) %>%
+  mutate(speedup=time.fad.elapsed/time.ffa.elapsed) %>%
   select(-n, -p, -time.fad.elapsed, -time.ffa.elapsed) %>%
   mutate(q=paste0("q = ", q))
 
@@ -29,7 +29,8 @@ ggplot(s, aes(x=r, y=speedup, col=npq, group=r)) +
   facet_grid(q~npq, scales = "free") +
   theme_bw() +
   theme(legend.position="none",
-        axis.title = element_text(size=16)) +
+        axis.title = element_text(size=14)) +
+  ylab("Speed-up")+
   scale_y_continuous(breaks=c(1, 10, 20, 40, 40, 50, 100, 150), minor_breaks = NULL) +
   geom_hline(yintercept=1) +
   scale_x_continuous(breaks=1:10)
