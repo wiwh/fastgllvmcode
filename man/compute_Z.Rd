@@ -11,7 +11,8 @@ compute_Z(
   thresh = 0.001,
   lambda = 1,
   save = F,
-  verbose = F
+  verbose = F,
+  return_object = F
 )
 }
 \arguments{

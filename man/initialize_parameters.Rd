@@ -4,7 +4,7 @@
 \alias{initialize_parameters}
 \title{Given a fastgllvm object, compute good intial values.}
 \usage{
-initialize_parameters(fg, target = NULL, rescale = F)
+initialize_parameters(fg, target = NULL, rescale = F, return_object = F)
 }
 \arguments{
 \item{fastgllvm:}{an object of class ''fastgllvm''}

@@ -11,7 +11,8 @@ ffa(
   eps = 1e-04,
   savepath = F,
   verbose = T,
-  iteratively_update_Psi = F
+  iteratively_update_Psi = T,
+  rotate_updates = F
 )
 }
 \description{

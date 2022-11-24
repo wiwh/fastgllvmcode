@@ -198,10 +198,10 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 100
-  binomial <- 0
-  nobs <- 100
-  q <- 2
+  gaussian <- 500
+  binomial <- 500
+  nobs <- 256
+  q <- 5
   p <- poisson + gaussian + binomial
 
 
@@ -319,7 +319,7 @@ if(0) {
   # points(fg$parameters$B, fit1$parameters$B, pch=2, col=1)
 
   plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
-  points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  plot(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
   # points(fg$parameters$B, fit2$parameters$B, col=3)
   abline(0,1,col=2)
   points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)

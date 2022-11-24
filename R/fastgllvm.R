@@ -139,8 +139,11 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=l
 
 
 
-
-# TODO: check that Z has the correct dimensions
+#' Validates a fastgllvm object
+#'
+#' @param fastgllvm: a fastgllvm object
+#'
+#' Strives to find errors in the fastgllvm object to simplify debugging.
 validate_fastgllvm <- function(fastgllvm) {
   with(fastgllvm, {
     stopifnot(is.matrix(Y))
@@ -176,7 +179,6 @@ validate_fastgllvm <- function(fastgllvm) {
       if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
       if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
     }
-
   })
 }
 
