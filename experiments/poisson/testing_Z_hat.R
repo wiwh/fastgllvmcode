@@ -6,6 +6,7 @@ rexpfam <- function(n, mu, family, scale=1){
 }
 
 genY <- function(A){
+  browser()
   z <- matrix(rnorm(n*q), n, q)
   lp <- z %*% t(A)
   y <- apply(lp, 1:2, function(ij) rexpfam(1,fam$linkinv(ij), fam))

@@ -1,17 +1,15 @@
 #' Computes the linear parameter
 #'
-#' @inheritParams compute_psi
+#' @inheritParams fastgllvm
 compute_linpar <- function(Z, A, X, B=NULL, XB=NULL) {
+  ZA <- Z %*% t(A)
   if (is.null(B) & is.null(XB)) {
-    ZA <- Z %*% t(A)
     linpar <- ZA
   } else {
     if(is.null(XB)) XB <- X %*% t(B)
-    ZA <- Z %*% t(A)
-    linpar <- Z %*% t(A) + XB
+    linpar <- ZA + XB
   }
-  linpar_list <- list(linpar=linpar, XB=XB, ZA=ZA)
-  linpar_list
+  list(linpar=linpar, XB=XB, ZA=ZA)
 }
 
 compute_linpar_bprime <- function(linpar, families) {
@@ -35,4 +33,18 @@ compute_linpar_bprimeprime <- function(linpar, families) {
     linpar[,families$id[[i]]] <- families$objects[[i]]$mu.eta(linpar[,families$id[[i]]])
   }
   linpar
+}
+
+
+compute_mean <- function(fg, linpar=NULL, mean=TRUE) {
+  if (is.null(linpar)) {
+    fg$linpar <- with(fg, compute_linpar(Z, parameters$A, X, parameters$B))$linpar
+  } else {
+    fg$linpar <- linpar
+  }
+
+  if (mean) {
+    fg$mean <- compute_linpar_bprime(fg$linpar, fg$families)
+  }
+  fg
 }

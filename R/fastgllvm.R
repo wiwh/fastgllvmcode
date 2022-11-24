@@ -1,10 +1,13 @@
-#' Fit a fastgllvm
-#' @param Y: a `n` times `p` matrix of observations
+#' Fit a GLLVM using an M-estimator a stochatic approximation algorithm.
+#' @param Y: a `n` times `p` matrix, organized with the observations in the rows and the responses in the columns
 #' @param q: the number of factors
-#' @param family: specifies the family. See below for more information.
+#' @param family: specifies the families. See below for more information.
 #' @param X: either `NULL` or a `n` timeis `k` matrix of covariates.
 #' @param intercept: a boolean (default:TRUE) indicating whether an intercept should be included in the model. If `X` is supplied and an intercept is desired, the first column of `X` must be a vector of ones to model the intercept.
-#' @description
+#' @param gradient_function: one of: "simple", "full", or a user-defined function.
+#' @param parameters.init: a list containing "A", "B", and "phi".
+#' @param hessian: one of "median", "F", or "T"
+#' @description Fits a gllvm model.
 #'
 #' @details
 #' The implemented families currently are "gaussian", "binomial", or "poisson.
@@ -42,11 +45,18 @@ fastgllvm <- function(Y,
                       intercept=T,
                       Z.init = NULL,
                       parameters.init=NULL,
-                      controls=list(),
-                      method="full",
+                      method="simple",
                       verbose = F,
                       hist = T,
-                      median= F) {
+                      hessian = T,
+                      use_signs = F,
+                      trim = 0.2,
+                      alpha = 0,
+                      batch_size=nrow(Y),
+                      maxit=100,
+                      H=1,
+                      H.seed = NULL,
+                      rescale=F) {
 
   stopifnot(is.matrix(Y))
 
@@ -61,7 +71,7 @@ fastgllvm <- function(Y,
       k <- 0
     }
   } else {
-    if (intercept && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
+    if (intercept && ncol(X) > 0 && any(X[,1] != 1)) warning("When X is supplied, the intercept argument is ignored. Add a column of ones as the first column if you want to have an intercept.")
     k <- ncol(X)
   }
 
@@ -72,85 +82,31 @@ fastgllvm <- function(Y,
     k = k
   )
 
-  parameters <- initialize_parameters(parameters.init, dimensions, method=method)
-  controls <- initialize_controls(controls)
-
-  fg <- new_fastgllvm(Y, X, parameters, families, dimensions)
-  fg$method <- method
-  fg$intercept <- intercept
-  fastgllvm.fit(fg, controls, verbose, hist, median=median)
-
-}
-
-# The workhorse for fitting a gllvm model.
-fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, median=F) {
-  # we store gradients and parameters in a list
-  if (!is.null(parameters.init)) {
-    parameters <- parameters.init
-  } else {
-    parameters <- compute_parameters_initial_values(fg, rescale=F)
-  }
-
-  gradients <-  initialize_gradients(parameters, method=fg$method)
-
-  # One may define other functions to compute gradients
-  if(fg$method == "full") compute_gradients <- compute_gradients_full
-  if(fg$method == "simple") compute_gradients <- compute_gradients_simple
-  if(fg$method == "rescale") compute_gradients <- compute_gradients_simple_rescale
-
-
-  zstar <- compute_zstar(fg$Y, parameters$A, parameters$phi, fg$X, parameters$B, fg$families)$Zstar
-  params_hist <- list()
-  if(hist) params_hist <- c(params_hist, list(parameters))
-
-  moving_average <- parameters
-  crit <- Inf
-
-  if(is.null(controls$learning_rate.args)) controls$learning_rate.args <- list(method="spall", rate=2, end=.1)
-  if(is.null(controls$learning_rate.args$method)) controls$learning_rate.args$method <- "spall"
-  if(is.null(controls[["learning_rate"]])) controls$learning_rate <- initialize_learning_rate(maxit=controls$maxit, learning_rate.args = controls$learning_rate.args)
-
-  for(i in 1:controls$maxit){
-    # if(i < controls$maxit/2) median <- .5 else median <- F
-    moving_average_old <- moving_average
-    gradients_old <- gradients
-    # get the gradient
-    gradients <- compute_gradients(fg$Y, fg$X, parameters, fg$families, fg$Miss, debiase=T)
-
-    # exponential smoothing step
-    # for (par in names(parameters)) {
-    #   gradients[[par]] <- (controls$beta * gradients[[par]] + (1-controls$beta) * gradients[[par]])
-    # }
-    parameters <- update_parameters(parameters, gradients, alpha=controls$alpha, learning_rate_i = controls$learning_rate(i), median=median)
-
-    # We track a moving average of the last 1/controls$ma iterates
-    for(k in seq_along(parameters)){
-      moving_average[[k]] <- controls$ma * moving_average[[k]] + (1 - controls$ma) * parameters[[k]]
-    }
-
-    if(i == 1 || i%%10 == 0 || i == controls$maxit){
-      crit <- compute_error(moving_average$A, moving_average_old$A, rotate=F)
-      cat("\n Iteration: ", i, " - crit: ", crit)
-    }
-    if(hist) params_hist <- c(params_hist, list(parameters))
-    if(i >= controls$minit && crit < controls$eps) break()
-  }
-
-  if(hist){
-    history <- sapply(names(parameters), function(par_name) {
-      do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
-    }, simplify=F)
-  }
-
-  # Update the fastgllvm object
-  fg$parameters <- moving_average
-  fg$fit <- list(
-    crit = crit,
-    controls = controls,
-    hist = if(hist) history else NULL
+  controls <- list(
+    batch_size = batch_size,
+    trim = trim,
+    method = method,
+    hessian = hessian,
+    use_signs = use_signs,
+    hist = hist,
+    alpha = alpha,
+    verbose = verbose,
+    maxit = maxit,
+    H = H,
+    H.seed = H.seed,
+    rescale = rescale
   )
-  fg$converged <- ifelse(crit < controls$eps, T, F)
-  fg
+
+  # get mising values
+  Miss <- is.na(Y)
+  if (!any(Miss)) {
+    Miss <- NULL
+  }
+
+  fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
+
+
+  fastgllvm.fit(fg, parameters.init=parameters.init, controls=controls)
 }
 
 # Constructor
@@ -164,78 +120,70 @@ fastgllvm.fit <- function(fg, controls, verbose, hist, parameters.init=NULL, med
 #' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
 #'
 #' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, parameters, families, dimensions, linpar=NULL, fit=list(), Miss=NULL) {
-  stopifnot(is.matrix(Y))
-  if(!is.null(parameters$B)) {
-    stopifnot(is.matrix(parameters$B))
-    stopifnot(is.matrix(X))
-    if(ncol(X) != ncol(parameters$B)) stop("Dimension mismatch between X and B.")
-  }
-
-
-  if (is.null(parameters)) {
-    parameters <- list()
-    parameters$A <- matrix(0, dimensions$p, dimensions$q)
-    if (dimensions$k > 0) {
-      parameters$B <- matrix(0, dimensions$p, dimensions$k)
-    } else {
-      parameters$B <- NULL
-    }
-    parameters$phi <- rep(1, dimensions$p)
-  }
-
-
-  stopifnot(is.matrix(parameters$A))
-  stopifnot(is.vector(parameters$phi))
-  stopifnot(is.list(fit))
-
-  if (dimensions$q >= dimensions$p) {
-    stop("The number of latent variables (q) must be strictly smaller than the number of observed variables (p).")
-  }
-  if (!is.vector(parameters$phi) || length(parameters$phi) != dimensions$p) {
-    stop("phi must be a vector of length p.")
-  }
-
-  # check that the families have been correctly specified
-  if(!all(sort(as.vector(do.call(c, families$id))) == 1:dimensions$p)) {
-    stop("Family incorrectly specified: check the indices.")
-  }
-
-  if (is.null(Miss)) {
-    Miss <- is.na(Y)
-    if (!any(Miss)) {
-      Miss <- NULL
-    }
-  }
-
-  if (!is.null(Miss)) {
-    if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
-    if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
-  }
-
+new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=list()) {
   fastgllvm <- structure(
     list(Y=Y,
          X=X,
+         Z=Z,
          parameters=parameters,
          families=families,
          dimensions=dimensions,
-         fit=fit,
-         Miss=Miss),
+         Miss=Miss,
+         fit=fit),
     class="fastgllvm")
+
+  validate_fastgllvm(fastgllvm)
+
   fastgllvm
 }
 
 
-# validate a fastgllvm object
-# TODO: families$id must total n!!!
-validate_fastgllvm <- function(fastgllvm){
 
-  # TODO: check that iff intercept is true, then X[,1] is full of ones.
-  # TODO: check that controls have the required stuff... or do that at control
-  # TODO: test that the Miss matrix has no row with all ones...
+
+# TODO: check that Z has the correct dimensions
+validate_fastgllvm <- function(fastgllvm) {
   with(fastgllvm, {
+    stopifnot(is.matrix(Y))
+    #' Check whether the parameters are correctly specified
+    if(!is.null(parameters)) {
+      stopifnot(is.matrix(parameters$A))
+      stopifnot(all(dim(parameters$A) == c(dimensions$p, dimensions$q)))
+
+      if (!is.vector(parameters$phi) || length(parameters$phi) != dimensions$p) {
+        stop("phi must be a vector of length p.")
+      }
+    }
+
+    if(!is.null(parameters$B)) {
+      stopifnot(is.matrix(parameters$B))
+      stopifnot(is.matrix(X))
+      if(ncol(X) != ncol(parameters$B)) stop("Dimension mismatch between X and B.")
+    }
+
+    stopifnot(is.list(fit))
+
+
+    if (dimensions$q >= dimensions$p) {
+      stop("The number of latent variables (q) must be strictly smaller than the number of observed variables (p).")
+    }
+
+    # check that the families have been correctly specified
+    if(!all(sort(as.vector(do.call(c, families$id))) == 1:dimensions$p)) {
+      stop("Family incorrectly specified: check the indices.")
+    }
+
+    if (!is.null(Miss)) {
+      if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
+      if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
+    }
+
   })
 }
+
+
+
+
+
 
 #' Generates a GLLVM model.
 #'
@@ -281,16 +229,11 @@ gen_fastgllvm <- function(nobs=100,
                      q=ncol(parameters$A),
                      k=if(is.null(parameters$B)) 0 else ncol(parameters$B))
 
-  # Generate unspecified variates
-  if (is.null(Z)) {
-    parameters$Z <- gen_Z(nobs, q)
-  } else {
-    parameters$Z <- Z
-  }
+
 
   if (is.null(X)) {
     if (dimensions$k==0) {
-      X <- matrix(NA, nobs, 0)
+      X <- matrix(NA, dimensions$n, 0)
     } else {
       X <- gen_X(dimensions$n, dimensions$k, intercept)
     }
@@ -303,27 +246,27 @@ gen_fastgllvm <- function(nobs=100,
   families <- generate_families(family, dimensions$p)
 
   # Generate data
-  linpar <- compute_linpar(parameters$Z, parameters$A, X, parameters$B)
-  Y <- generate_y(linpar, parameters$phi, families)$Y
+  variables <- gen_Y(Z=Z, X=X, parameters = parameters, families = families)
 
   if (miss.prob != 0) {
-    Y[runif(prod(dim(Y))) < miss.prob] <- NA
-    Miss <- is.na(Y)
+    variables$Y[runif(prod(dim(variables$Y))) < miss.prob] <- NA
+    Miss <- is.na(variables$Y)
   } else {
     Miss <- NULL
   }
 
   fastgllvm <- new_fastgllvm(
-    Y=Y,
+    Y=variables$Y,
+    Z=variables$Z,
     X=X,
     parameters=parameters,
     families=families,
     dimensions=dimensions,
-    linpar=linpar,
     Miss = Miss
   )
 
   fastgllvm$intercept <- intercept
+  fastgllvm$parameters_true <- fastgllvm$parameters
 
   validate_fastgllvm(fastgllvm)
   fastgllvm
@@ -365,8 +308,7 @@ generate_parameters <- function(A, B, phi, p, q, k){
 
 
 #' Generate the families list as used in the other functions
-#' @param families: either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.
-#' @value families: a list of families
+#' @param family: either a string, or a vector of strings of length p specifying the name(s) of the families to be used: each element must be one of "gaussian", "binomial", or "poisson". For now, only the canonical link function is used so it needs not be specified.
 generate_families <- function(family, p){
   stopifnot(is.character(family))
   if (!(length(family) %in% c(1,p))) stop("Length of the 'family' vector must be either 1 or p.")
@@ -408,11 +350,11 @@ generate_families <- function(family, p){
 if(0) {
     devtools::load_all()
     set.seed(1234)
-    poisson  <- 20
-    gaussian <- 0
-    binomial <- 0
+    poisson  <- 1000
+    gaussian <- 1000
+    binomial <- 1000
     nobs <- 100
-    q <- 2
+    q <- 5
     p <- poisson + gaussian + binomial
 
     intercept <- T
@@ -421,12 +363,14 @@ if(0) {
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(10030)
     fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
+
+    plot(simulate(fg, conditional=T)$Y, fg$Y)
     # check initialization
     # set.seed(123)
     # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     # plot(fit)
     set.seed(1304)
-    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.2)
+    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.5, batch_size=12)
     # set.seed(1304)
     # fit.full <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=500, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="full", median=.2)
 
@@ -457,7 +401,7 @@ if(0) {
     plot(fg$parameters$B, fit.simple$parameters$B);abline(0,1,col=2)
 
 
-    plot(fg$parameters$Z, fit.simple$parameters$Z)
+    plot(fg$Z, fit.simple$Z)
 
     # GAUSSIAN TEST
     fit.ffa <- ffa(fg$Y, q, iteratively_update_Psi = T)
@@ -497,7 +441,7 @@ if(0) {
   compute_error(fit.fg$parameters$A, fg$parameters$A, rotate=T)
 
 
-  plot(fg$parameters$Z, fit.fg$parameters$Z); abline(0,-1,col=2)
+  plot(fg$Z, fit.fg$Z); abline(0,-1,col=2)
   plot(fg$par$A, psych::Procrustes(fit.fg$parameters$A, fg$parameters$A)$loadings); abline(0,1,col=2)
   points(fg$par$A, psych::Procrustes(fit.m$A_hat, fg$parameters$A)$loadings, col=2)
   plot(fg$par$B, fit.fg$parameters$B, ylim=range(fg$parameters$B*1.5)); abline(0,1,col=2)

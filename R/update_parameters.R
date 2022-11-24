@@ -1,21 +1,3 @@
-check_update_parameters <- function(parameters){
-  if (any(parameters$phi < 1e-2)) {
-    warning("Parameter phi too small or negative, set to 1e-4 instead.")
-    parameters$phi[parameters$phi < 1e-2] <- 1e-2
-  }
-  if(any(abs(parameters$A) > 10)) {
-    parameters$A[parameters$A > 10] <- 10
-    parameters$A[parameters$A < -10] <- -10
-  }
-  if(!is.null(parameters$B) && any(abs(parameters$B) > 10)) {
-    parameters$B[parameters$B > 10] <- 10
-    parameters$B[parameters$B < -10] <- -10
-  }
-  # parameters <- recenter(parameters, 1) # DO NOT RESCALE! BIASES BINOMIAl p=4, q=1, n=10000
-  # warning("recentered parameters")
-  parameters
-}
-
 update_parameters <- function(parameters, gradients, alpha, learning_rate_i, ...){
   args <- list(...)
   if(!is.null(args[["median"]])) median <- args[["median"]] else median <- F
@@ -40,6 +22,31 @@ update_parameters <- function(parameters, gradients, alpha, learning_rate_i, ...
   }
   parameters <- check_update_parameters(parameters)
 }
+
+trim <- function(X, value) {
+  id_too_big <- abs(X) > value
+  X[id_too_big] <- value * sign(X[id_too_big])
+  X
+}
+
+check_update_parameters <- function(parameters){
+  if (any(parameters$phi < 1e-2)) {
+    warning("Parameter phi too small or negative, set to 1e-4 instead.")
+    parameters$phi[parameters$phi < 1e-2] <- 1e-2
+  }
+  if(any(abs(parameters$A) > 10)) {
+    parameters$A[parameters$A > 10] <- 10
+    parameters$A[parameters$A < -10] <- -10
+  }
+  if(!is.null(parameters$B) && any(abs(parameters$B) > 10)) {
+    parameters$B[parameters$B > 10] <- 10
+    parameters$B[parameters$B < -10] <- -10
+  }
+  # parameters <- recenter(parameters, 1) # DO NOT RESCALE! BIASES BINOMIAl p=4, q=1, n=10000
+  # warning("recentered parameters")
+  parameters
+}
+
 
 # Check that the parameters wiggle around some value
 check_convergence <- function(history){

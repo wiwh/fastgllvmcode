@@ -3,6 +3,8 @@
 S3method(plot,fastgllvm)
 S3method(predict,fastgllvm)
 S3method(print,fastgllvm)
+S3method(simulate,fastgllvm)
+S3method(subset,fastgllvm)
 S3method(update,fastgllvm)
 export(fastgllvm)
 export(ffa)

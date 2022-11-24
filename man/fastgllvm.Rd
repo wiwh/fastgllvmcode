@@ -12,9 +12,15 @@ fastgllvm(
   intercept = T,
   Z.init = NULL,
   parameters.init = NULL,
-  controls = list(),
+  method = "simple",
   verbose = F,
-  hist = T
+  hist = T,
+  hessian = T,
+  use_signs = F,
+  trim = 0.2,
+  alpha = 0,
+  batch_size = nrow(Y),
+  maxit = 100
 )
 }
 \arguments{
@@ -22,14 +28,20 @@ fastgllvm(
 
 \item{q:}{the number of factors}
 
-\item{family:}{specifies the family. See below for more information.}
+\item{family:}{specifies the families. See below for more information.}
 
 \item{X:}{either \code{NULL} or a \code{n} timeis \code{k} matrix of covariates.}
 
 \item{intercept:}{a boolean (default:TRUE) indicating whether an intercept should be included in the model. If \code{X} is supplied and an intercept is desired, the first column of \code{X} must be a vector of ones to model the intercept.}
+
+\item{gradient_function:}{one of: "simple", "full", or a user-defined function.}
+
+\item{parameters.init:}{a list containing "A", "B", and "phi".}
+
+\item{hessian:}{one of "median", "F", or "T"}
 }
 \description{
-
+Fits a gllvm model.
 }
 \details{
 The implemented families currently are "gaussian", "binomial", or "poisson.

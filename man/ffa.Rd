@@ -4,7 +4,15 @@
 \alias{ffa}
 \title{Computes the maximum likelihood estimator for factor analysis}
 \usage{
-ffa(Y, q, maxiter = 100, eps = 1e-04, savepath = F, verbose = F)
+ffa(
+  Y,
+  q,
+  maxiter = 100,
+  eps = 1e-04,
+  savepath = F,
+  verbose = T,
+  iteratively_update_Psi = F
+)
 }
 \description{
 Computes the maximum likelihood estimator for factor analysis
