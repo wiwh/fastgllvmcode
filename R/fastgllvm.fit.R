@@ -3,7 +3,6 @@
 fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # Initialization
   # --------------
-
   if (!is.null(parameters.init)) {
     fg$parameters <- parameters.init
     if(is.null(fg$Z)) fg$Z <- compute_Z(fg)$Z
@@ -20,6 +19,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   params_hist <- list()
   if(!is.null(controls$hist)) params_hist <- c(params_hist, list(c(fg$parameters, deviance=fg$deviance)))
 
+  # Initialize the moving average
   ma <- fg$parameters
 
   # Impute for Y
@@ -75,10 +75,9 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
         fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
       }
 
-      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi, controls$trim)
-      fg$parameters <- check_update_parameters(fg$parameters)
+      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi*.1, controls$trim)
 
-      fg$parameters$covZ <- covZ
+      fg$parameters <- check_update_parameters(fg$parameters)
 
       # cat("\nSign:", signs)
     }
@@ -88,6 +87,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
     # rescale the model
     if (controls$rescale) {
+      fg$parameters$covZ <- cov(fg$Z)
       fg_rescaled <- rescale(fg, rescale.A = T, rescale.B = T, target.cov = fg$parameters$covZ)
       fg$parameters$A <- fg$parameters$A * .9 + fg_rescaled$parameters$A * .1
       fg$parameters$B <- fg_rescaled$parameters$B * .9 + fg_rescaled$parameters$B * .1
@@ -198,10 +198,10 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 500
-  binomial <- 500
-  nobs <- 256
-  q <- 5
+  gaussian <- 0
+  binomial <- 4
+  nobs <- 100
+  q <- 1
   p <- poisson + gaussian + binomial
 
 
@@ -213,7 +213,7 @@ if(0) {
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(14240)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0.4, scale=1, phi=rep(1, p))
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
 
   if(0) {
     fg$Y <- scale(fg$Y, scale=F)

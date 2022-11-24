@@ -46,18 +46,18 @@ fastgllvm <- function(Y,
                       intercept=T,
                       Z.init = NULL,
                       parameters.init=NULL,
-                      method="simple",
+                      method="full",
                       verbose = F,
                       hist = 100,
                       hessian = T,
                       use_signs = F,
                       trim = 0.2,
-                      alpha = 0,
+                      alpha = 0.2,
                       batch_size=nrow(Y),
                       maxit=100,
                       H=1,
                       H.seed = NULL,
-                      rescale=F) {
+                      rescale=T) {
 
   stopifnot(is.matrix(Y))
 
