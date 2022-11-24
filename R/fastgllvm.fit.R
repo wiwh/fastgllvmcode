@@ -1,49 +1,37 @@
 #' Fit a fastgllvm object for fitting a gllvm model.
 #'
 fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
+  # Initialization
+  # --------------
 
-  if(is.null(fg$parameters)) {
-    # compute initial values for A, B phi, Z
-    initial_values <- initialize_parameters(fg)
-    fg$Z <- initial_values$Z
-    fg$parameters <- list(A = initial_values$A,
-                          B = initial_values$B,
-                          phi = initial_values$phi,
-                          covZ = cov(fg$Z))
-    rm("initial_values")
-    fg$parameters <- initialize_additional_parameters(fg, controls$method) # TODO: this is useless now.. check this
-    fg$mean <- fg$linpar <- matrix(0, nrow=fg$dimensions$n, ncol=fg$dimensions$p)
+  if (!is.null(parameters.init)) {
+    fg$parameters <- parameters.init
+    if(is.null(fg$Z)) fg$Z <- compute_Z(fg)$Z
+  } else if(is.null(fg$parameters)) {
+    # compute initial values for A, B phi, Z, covZ
+    fg <- initialize_parameters(fg, return_object = T)
   } else {
-    cat("\nInitial parameters successfully set from the supplied model.")
+    cat("\nInitial parameters set to the values from the supplied fit.")
   }
 
-
-  # gradients <- initialize_gradients(fg$parameters)
-  # if (controls$hessian) {
-  #   hessian <- simulate_hessian_AB(fg)
-  # } else {
-  #   hessian <- NULL
-  # }
+  fg <- compute_mean(fg, return_object = T)
+  fg$deviance <- mean(compute_deviance(fg))
 
   params_hist <- list()
-  if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
+  if(!is.null(controls$hist)) params_hist <- c(params_hist, list(c(fg$parameters, deviance=fg$deviance)))
 
   ma <- fg$parameters
 
-  # impute for Y
+  # Impute for Y
   if(!is.null(fg$Miss)) {
     fg$Y[fg$Miss] <- fg$mean[fg$Miss]
   }
-
 
   # Beginning of the iterations
   # ---------------------------
   for (i in 1:controls$maxit) {
 
-    # only update the hessian once per pass...
     if (controls$hessian) hessian <- simulate_hessian_AB(fg)
-
-
 
     if (i < 20){
       step_size = controls$alpha
@@ -87,50 +75,53 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
         fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
       }
 
-      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi*.1, controls$trim)
+      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi, controls$trim)
+      fg$parameters <- check_update_parameters(fg$parameters)
 
       fg$parameters$covZ <- covZ
 
-      if(controls$hist) params_hist <- c(params_hist, list(fg$parameters))
       # cat("\nSign:", signs)
     }
 
-    # update the Hessian
-    # fg$hessian <- update_hessian_AB(fg$hessian, compute_hessian_AB(fg$X, fg$dimensions, fg$parameters, fg$families), weight=.9)
-    # Importantly, the hessian must be computed independently from the rest
-    fg <- compute_Z(fg, start=fg$Z, return_fastgllvm = T)
-    fg <- compute_mean(fg)  # TODO: compute mean based on ma mayhaps?
+    fg <- compute_Z(fg, start=fg$Z, return_object = T)
+    fg <- compute_mean(fg, return_object = T)  # TODO: compute mean based on ma mayhaps?
 
     # rescale the model
     if (controls$rescale) {
       fg_rescaled <- rescale(fg, rescale.A = T, rescale.B = T, target.cov = fg$parameters$covZ)
       fg$parameters$A <- fg$parameters$A * .9 + fg_rescaled$parameters$A * .1
+      fg$parameters$B <- fg_rescaled$parameters$B * .9 + fg_rescaled$parameters$B * .1
     }
+
 
     # fg$parameters$phi <- compute_phi(fg)
     # impute for Y
     if(!is.null(fg$Miss)) {
       fg$Y[fg$Miss] <- fg$mean[fg$Miss]
     }
+    ma <- update_moving_average(ma, fg$parameters, 0.9)
+
     fg$deviance <- mean(compute_deviance(fg))
     cat("\ni: ", i, "dev:", fg$deviance)
 
-
-    ma <- update_moving_average(ma, fg$parameters, 0.9)
+    if(!is.null(controls$hist)){
+      if (length(params_hist) > controls$hist) params_hist[[1]] <- NULL
+      params_hist <- c(params_hist, list(c(fg$parameters, deviance=fg$deviance)))
+    }
   }
 
-
   fg$parameters <- ma
-  fg <- compute_mean(fg)
+  fg <- compute_mean(fg, return_object = T)
 
-  if(controls$hist){
-    history <- sapply(names(fg$parameters), function(par_name) {
+  if(!is.null(controls$hist)){
+    history <- sapply(names(params_hist[[1]]), function(par_name) {
       do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
     }, simplify=F)
   }
 
   fg$fit$hist <- if(controls$hist) history else NULL
   fg$controls <- controls
+  fg$controls$alpha <- step_size
   fg$Z <- compute_Z(fg, start=fg$Z)$Z
   fg
 }
@@ -207,10 +198,10 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 1000
+  gaussian <- 100
   binomial <- 0
   nobs <- 100
-  q <- 5
+  q <- 2
   p <- poisson + gaussian + binomial
 
 
@@ -221,32 +212,34 @@ if(0) {
 
 
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
-  set.seed(120)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
-  fg$Y <- scale(fg$Y, scale=F)
-  sds <- sqrt(colMeans(fg$Y^2))
+  set.seed(14240)
+  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0.4, scale=1, phi=rep(1, p))
 
-  fit.fad <- fad::fad(fg$Y, factors = 10)
-  fit.ffa <- ffa(fg$Y, 10, maxiter = 100, eps=1e-10, savepath = T)
+  if(0) {
+    fg$Y <- scale(fg$Y, scale=F)
+    sds <- sqrt(colMeans(fg$Y^2))
 
-  compute_FFA_error(fg$Y, fit.fad$loadings * sds, fit.fad$uniquenesses*sds^2)
-  compute_FFA_error(fg$Y, fit.ffa$A, fit.ffa$Psi)
+    fit.fad <- fad::fad(fg$Y, factors = 10)
+    fit.ffa <- ffa(fg$Y, 10, maxiter = 100, eps=1e-10, savepath = T)
 
-  ts.plot(fit.ffa$path$Psi)
+    compute_FFA_error(fg$Y, fit.fad$loadings * sds, fit.fad$uniquenesses*sds^2)
+    compute_FFA_error(fg$Y, fit.ffa$A, fit.ffa$Psi)
 
-  compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
-  compute_error(fit1$loadings  * sds, fg$parameters$A)
-  compute_error(fit2$A, fg$parameters$A)
+    ts.plot(fit.ffa$path$Psi)
 
-  sims <- sapply(1:10, function(na) {
-    set.seed(213131+na)
-    fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi = runif(p, .2, .8))
-    sds <- apply(fg$Y, 2, sd)
-    fit1 <- fad::fad(fg$Y, factors = q)
-    fit2 <- ffa(fg$Y, q, maxiter = 20, eps=1e-5, savepath = T)
-    cat("\n", fit2$niter)
     compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
-  })
+    compute_error(fit1$loadings  * sds, fg$parameters$A)
+    compute_error(fit2$A, fg$parameters$A)
+
+    sims <- sapply(1:10, function(na) {
+      set.seed(213131+na)
+      fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi = runif(p, .2, .8))
+      sds <- apply(fg$Y, 2, sd)
+      fit1 <- fad::fad(fg$Y, factors = q)
+      fit2 <- ffa(fg$Y, q, maxiter = 20, eps=1e-5, savepath = T)
+      cat("\n", fit2$niter)
+      compute_error(fit1$loadings  * sds, fg$parameters$A) - compute_error(fit2$A, fg$parameters$A)
+    })
 
   hist(sims)
 
@@ -267,32 +260,26 @@ if(0) {
   #
   # plot(fit0)
 
+  }
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=100, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
   # clear winner in poisson
   # full, with rescaling outside the loop
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=T, method="full", batch_size=1000, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   plot(fit2)
-  fit2 <- update(fit2, H=1, alpha=fit2$controls$alpha, maxit=20)
+  fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit2)
-  # for(i in 1:5) {
-  #   fit2 <- update(fit2, H=i, alpha=fit2$controls$alpha/2, trim=fit2$controls$trim/2, H=i, maxit=10)
-  #   plot(fit2)
-  # }
-
-  plot(fg$Y, fit2$mean)
-  abline(0,1,col=2)
 
   # simple, without rescaling
   set.seed(13342)
-  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="simple", batch_size=1000, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit3 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="simple", batch_size=500, trim=.2, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   plot(fit3)
-  fit3 <- update(fit3, H=20, maxit=20)
+  fit3 <- update(fit3, H=10, maxit=10)
   plot(fit3)
   # for(i in 1:5) {
   #   fit3 <- update(fit3, H=i, alpha=fit3$controls$alpha/2, trim=fit3$controls$trim/2, H=i, maxit=10)
@@ -301,8 +288,8 @@ if(0) {
 
   # Approx for large p
   set.seed(1334)
-  fit4 <- fastgllvm(fg$Y, q = q, family=family, hist=T, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
-  fit4 <- update(fit4, H=20)
+  fit4 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
+  fit4 <- update(fit4, H=10, alpha=fit4$controls$alpha/10, maxit=10)
   plot(fit4)
   # for(i in 1:5) {
   #   fit4 <- update(fit4, trim=fit4$controls$trim/1.5, H=i, maxit=10)
@@ -316,7 +303,6 @@ if(0) {
 
   library(mirtjml)
   fit.mirtjml <- mirtjml::mirtjml_expr(fg$Y, K=q, tol = .01)
-  compute_error(fit.mirtjml$A_hat, fg$parameters$A)
 
   library(gmf)
   fit.gmf <- gmf(fg$Y,X = fg$X, family=poisson(), p=q, intercept = F)
@@ -326,10 +312,6 @@ if(0) {
   if(q==2) fit.ltm <- ltm(fg$Y ~ z1 + z2)
 
 
-  mean(compute_deviance(fit))
-  mean(compute_deviance(fit.gmf.dev))
-
-
   # plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
   # abline(0,1,col=2)
   # points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
@@ -337,8 +319,8 @@ if(0) {
   # points(fg$parameters$B, fit1$parameters$B, pch=2, col=1)
 
   plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
-  plot(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
-  points(fg$parameters$B, fit2$parameters$B, col=3)
+  points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
+  # points(fg$parameters$B, fit2$parameters$B, col=3)
   abline(0,1,col=2)
   points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
   points(fg$parameters$A, psych::Procrustes(fit4$parameters$A, fg$parameters$A)$loadings, col=4)
@@ -352,6 +334,7 @@ if(0) {
   compute_error(fit2$parameters$A, fg$parameters$A)
   compute_error(fit3$parameters$A, fg$parameters$A)
   compute_error(fit4$parameters$A, fg$parameters$A)
+  compute_error(fit.gllvm$params$theta, fg$parameters$A)
   compute_error(fit.gmf$v, fg$parameters$A)
   compute_error(fit.mirtjml$A_hat, fg$parameters$A)
   compute_error(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)

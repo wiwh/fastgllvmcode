@@ -7,6 +7,7 @@
 #' @param gradient_function: one of: "simple", "full", or a user-defined function.
 #' @param parameters.init: a list containing "A", "B", and "phi".
 #' @param hessian: one of "median", "F", or "T"
+#' @param hist: the last `hist` iterations are kept for the graph. Do not keep any if set to NULL.
 #' @description Fits a gllvm model.
 #'
 #' @details
@@ -47,7 +48,7 @@ fastgllvm <- function(Y,
                       parameters.init=NULL,
                       method="simple",
                       verbose = F,
-                      hist = T,
+                      hist = 100,
                       hessian = T,
                       use_signs = F,
                       trim = 0.2,
@@ -104,7 +105,6 @@ fastgllvm <- function(Y,
   }
 
   fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
-
 
   fastgllvm.fit(fg, parameters.init=parameters.init, controls=controls)
 }
