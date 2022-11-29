@@ -198,10 +198,10 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 0
-  binomial <- 4
+  gaussian <- 100
+  binomial <- 100
   nobs <- 100
-  q <- 1
+  q <- 2
   p <- poisson + gaussian + binomial
 
 
@@ -268,7 +268,7 @@ if(0) {
   fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
   # clear winner in poisson
-  # full, with rescaling outside the loop
+  # full, with rescaling outside the loopa-
   set.seed(13342)
   fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   plot(fit2)

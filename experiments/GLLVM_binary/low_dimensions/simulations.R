@@ -1,3 +1,108 @@
+
+
+est.gmf <- function(dat){
+  tm <- proc.time()
+  model.newton = gmf(Y = dat$Y, X = dat$X, p=dat$dimensions$q, maxIter = 100,
+                     family=binomial(), tol = 1e-5, intercept = F, method="quasi")
+  tmdiff <- proc.time()-tm
+
+  A <- model.newton$v
+  B <- t(model.newton$beta)
+
+  list(A=A, B=B, time=tmdiff)
+}
+
+est.gllvm <- function(dat){
+  tm <- proc.time()
+  fit.gllvm <- gllvm(y= dat$Y, X= dat$X, formula = ~0 +., num.lv=dat$dimensions$q, family=binomial(link="logit"))
+  tmdiff <- proc.time()-tm
+
+  coefs <- coefficients(fit.gllvm)
+  A <- coefs$theta
+  B <- coefs$Xcoef
+
+  list(A=A, B=B, time=tmdiff)
+}
+
+est.sprime <- function(dat){
+  tm <- proc.time()
+  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "binomial", intercept = T, method="simple", alpha=.2, maxit=50, hist=100, batch_size = 500)
+  tmdiff <- proc.time()-tm
+  fit.sa <- update(fit.sa, alpha=.05)
+  A <- fit.sa$parameters$A
+  B <- fit.sa$parameters$B
+
+  list(A=A, B=B, time=tmdiff)
+}
+
+
+est.ltm <- function(dat) {
+  library(ltm)
+  tm <- proc.time()
+  if(q==1) fit.ltm <- ltm(dat$Y ~ z1)
+  if(q==2) fit.ltm <- ltm(dat$Y ~ z1 + z2)
+  tmdiff <- proc.time()-tm
+
+  A <- as.matrix(fit.ltm$coefficients[,2:(1 + dat$dimensions$q), drop=F])
+  B <- as.matrix(fit.ltm$coefficients[,1, drop=F])
+  list(A=A, B=B, time=tmdiff)
+}
+
+est.prime <- function(dat){
+  tm <- proc.time()
+  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "binomial", intercept = T, method="full", alpha=.2, maxit=50, hist=100, batch_size = 500)
+  tmdiff <- proc.time()-tm
+  fit.sa <- update(fit.sa, alpha=.05)
+  A <- fit.sa$parameters$A
+  B <- fit.sa$parameters$B
+
+  list(A=A, B = B, time=tmdiff)
+}
+
+
+est.mirtjml <- function(dat) {
+  library(mirtjml)
+  tm <- proc.time()
+  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q, tol=1e-3)
+  tmdiff <- proc.time()-tm
+  A <- fit$A_hat
+  B <- fit$d_hat
+
+  list(A=A, B = B, time=tmdiff)
+}
+
+est.all <- function(dat){
+  list(prime=est.prime(dat),
+       sprime=est.sprime(dat),
+       gmf=est.gmf(dat),
+       gllvm=est.gllvm(dat),
+       ltm=est.ltm(dat),
+       mirtjml = est.mirtjml(dat)
+       )
+}
+
+
+
+gen_dat <- function(n, p, q, A, B){
+  dat <- gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A, B=B)
+  dat
+}
+
+
+onesim <- function(seed, n, p, A, B){
+  library(gmf)
+  library(gllvm)
+  library(ltm)
+  library(mirtjml)
+  devtools::load_all()
+  set.seed(seed)
+  dat <- gen_dat(n, p, q=2, A=A, B=B)
+  simres <- tryCatch(c(model=list(dat), est.all(dat), seed=seed, n=n, p=p), error=function(e) paste0("Error with seed=", seed, ", n=", n, ", p=",p, ", q=", 2 ))
+  saveRDS(simres, file=paste0("experiments/GLLVM_binary/low_dimensions/simres/n", n, "_p", p, "_seed", seed,".rds"))
+}
+
+
+
 devtools::load_all()
 library(ltm)
 library(mirtjml)
@@ -7,92 +112,13 @@ library(gllvm)
 family <- binomial()
 
 # Simulation settings:
-rep <- 1000
+rep <- 50
 q <- 2
 p.list <- c(20, 40)
 n.list <- c(50, 100, 500)
 
-# We compare 4 methods:
 
-est.gmf <- function(dat){
-  tm <- proc.time()
-  model.newton = gmf(Y = dat$Y, X = dat$X, d = dat$dimentions$k, p=dat$dimensions$q, maxIter = 100,
-                     family=family, tol = 1e-5, intercept = F)
-  tmdiff <- proc.time()-tm
-
-  A.est <- model.newton$v
-
-  proc <- MPE(A.est, dat$parameters$A)
-  list(A=proc$Lrot, error=proc$Error, time=tmdiff)
-}
-
-est.gllvm <- function(dat){
-  tm <- proc.time()
-  fit.gllvm <- gllvm(y= dat$Y, X= dat$X, formula = ~., num.lv=dat$dimensions$q, family=binomial(link="logit"))
-  tmdiff <- proc.time()-tm
-
-  coefs <- coefficients(fit.gllvm)
-  A.est <- coefs$theta
-
-  proc <- procrustes(A.est, dat$par$A)
-  list(A=proc$Lrot, error=proc$Error, time=tmdiff)
-}
-
-est.sprime <- function(dat){
-  tm <- proc.time()
-  fit.sa <- fastgllvm(dat)
-  tmdiff <- proc.time()-tm
-
-  A.est <- fit.sa$A
-
-  proc <- procrustes(A.est, dat$par$A)
-  list(A=proc$Lrot, error=proc$Error, time=tmdiff)
-}
-
-est.prime <- function(dat){
-  tm <- proc.time()
-  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "binomial", intercept = T, method="full", alpha=1, maxit=100, hist=100)
-  tmdiff <- proc.time()-tm
-  for(i in 1:4) fit.sa <- update(fit.sa, fit.sa$controls$a*10, H=10, maxit=10)
-
-  plot(fit.sa)
-
-  A.est <- fit.sa$parameters$A
-
-  MPE(A.est, dat$parameters$A)
-
-  proc <- psych::Procrustes(A.est, dat$parameters$A)
-  list(A=proc$Lrot, error=proc$Error, time=tmdiff)
-}
-
-est.all <- function(dat){
-  list(sp=est.sp(dat),
-       sa=est.sa(dat),
-       gmf=est.gmf(dat),
-       gllvm=est.gllvm(dat))
-}
-
-
-gen_dat <- function(n, p, q){
-  A <- matrix(0, p, q)
-  A[,1] <- seq(2,-2, l=p)
-  if(q==2) {
-    A[,2] <- seq(-1,1, l=p)
-  }
-  dat <- gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A)
-  dat
-}
-
-onesim <- function(seed, n, p){
-  set.seed(seed)
-  library(gmf)
-  library(gllvm)
-  library(ltm)
-  library(mirtjml)
-  devtools::load_all()
-  dat <- gen_dat(n, p)
-  c(dat=dat, est.all(dat), seed=seed, n=n, p=p)
-}
+# We compare 5 methods:
 
 settings <- expand.grid(n.list, p.list)
 colnames(settings) <- c("n", "p")
@@ -103,15 +129,15 @@ cl <- parallel::makeCluster(detectCores()-2)
 # Run parallel computation
 parallel::clusterExport(cl, ls())
 
-bigsim <- vector(mode="list", l=nrow(settings))
-
-for(i in seq_along(bigsim)){
+for(i in 1:nrow(settings)){
   n <- as.numeric(settings[i,1])
   p <- as.numeric(settings[i,2])
-  bigsim[[i]] <- parallel::parLapply(cl,
-                                     1:500,
-                                     onesim, n=n, p=p)
+
+  A[,1] <- seq(-2,2, l=p)
+  A[,2] <- seq(1, -1, l=p)
+  B <- matrix(runif(p, -1,1), p,1)
+
+  parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B)
   # Close cluster
 }
-save(bigsim, file="./experiments/low_dimensions/low_dimensions_results.Rdata")
 parallel::stopCluster(cl)

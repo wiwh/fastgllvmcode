@@ -42,7 +42,7 @@ plot.fastgllvm <- function(f, plot.last=NULL){
 "update.fastgllvm" <- function(fg, ...){
   args <- list(...)
 
-  # unpacking the extra args
+  # unpacking control arguments
   for (name in names(fg$controls)) {
     if (!is.null(args[[name]])) {
       fg$controls[[name]] <- args[[name]]
