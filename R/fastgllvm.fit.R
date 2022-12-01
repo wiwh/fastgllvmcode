@@ -198,8 +198,8 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 100
-  binomial <- 100
+  gaussian <- 0
+  binomial <- 20
   nobs <- 100
   q <- 2
   p <- poisson + gaussian + binomial
@@ -267,6 +267,16 @@ if(0) {
   fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=100, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
+  MPE(fit1$parameters$A, fg$parameters$A)
+
+  tm <- proc.time()
+  fit.sa <- fastgllvm(fg$Y, fg$dimensions$q, family = "binomial", intercept = T, method="full", alpha=.2, maxit=50, hist=100, batch_size = 100)
+  tmdiff <- proc.time()-tm
+  fit.sa <- update(fit.sa, alpha=.05)
+  plot(fit.sa)
+
+  MPE(fit.sa$parameters$A, fg$parameters$A)
+
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
@@ -305,7 +315,7 @@ if(0) {
   fit.mirtjml <- mirtjml::mirtjml_expr(fg$Y, K=q, tol = .01)
 
   library(gmf)
-  fit.gmf <- gmf(fg$Y,X = fg$X, family=poisson(), p=q, intercept = F)
+  fit.gmf <- gmf(fg$Y,X = fg$X, family=binomial(), p=q, intercept = F, method="quasi")
 
   library(ltm)
   if(q==1) fit.ltm <- ltm(fg$Y ~ z1)
@@ -330,14 +340,14 @@ if(0) {
   points(fg$parameters$A, psych::Procrustes(fit.mirtjml$A_hat, fg$parameters$A)$loadings, col=3)
   # points(fg$parameters$B, t(fit.gmf$beta), col=4)
   # compute_error(fit0$parameters$A, fg$parameters$A)
-  compute_error(fit1$parameters$A, fg$parameters$A)
-  compute_error(fit2$parameters$A, fg$parameters$A)
-  compute_error(fit3$parameters$A, fg$parameters$A)
-  compute_error(fit4$parameters$A, fg$parameters$A)
-  compute_error(fit.gllvm$params$theta, fg$parameters$A)
-  compute_error(fit.gmf$v, fg$parameters$A)
-  compute_error(fit.mirtjml$A_hat, fg$parameters$A)
-  compute_error(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)
+  MPE(fit1$parameters$A, fg$parameters$A)
+  MPE(fit2$parameters$A, fg$parameters$A)
+  MPE(fit3$parameters$A, fg$parameters$A)
+  MPE(fit4$parameters$A, fg$parameters$A)
+  MPE(fit.gllvm$params$theta, fg$parameters$A)
+  MPE(fit.gmf$v, fg$parameters$A)
+  MPE(fit.mirtjml$A_hat, fg$parameters$A)
+  MPE(fit.ltm$coefficients[,2:(1+q), drop=F], fg$parameters$A, rotate=T)
 
   plot(fg$Z, fit$Z); abline(0,-1,col=2); abline(0,1,col=2)
   points(fg$Z, -fit.gmf$u, col=2)

@@ -1,4 +1,5 @@
 library(tidyverse)
+devtools::load_all()
 # load all sims
 files <- list.files("experiments/GLLVM_binary/low_dimensions/simres/")
 simres <- lapply(files, function(file) readRDS(paste0("experiments/GLLVM_binary/low_dimensions/simres/", file)))
@@ -21,4 +22,15 @@ MPE.sims.list <- lapply(simres, function(sim){
 
 MPE.sims <- do.call(rbind, MPE.sims.list) %>% as_tibble()
 
-boxplot(MPE.sims %>% filter(p==20 & n == 100) %>% dplyr::select(ltm, prime, sprime), outline=F)
+
+
+rep <- 50
+q <- 2
+p.list <- c(20, 40)
+n.list <- c(100, 200, 500)
+settings <- expand.grid(n.list, p.list)
+colnames(settings) <- c("n", "p")
+
+i<-1
+boxplot(MPE.sims %>% filter(p==settings[i,2] & n == settings[i,1]) %>% dplyr::select(prime, sprime, gmf, ltm), outline=F)
+i <- i+1

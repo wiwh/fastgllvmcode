@@ -1,8 +1,8 @@
 library(tidyverse)
 library(psych)
 # load all sims
-files <- list.files("experiments/GLLVM_binary/low_dimensions/simres/")
-simres <- lapply(files, function(file) readRDS(paste0("experiments/GLLVM_binary/low_dimensions/simres/", file)))
+files <- list.files("experiments/GLLVM_binary/low_dimensions/simres_old/")
+simres <- lapply(files, function(file) readRDS(paste0("experiments/GLLVM_binary/low_dimensions/simres_old/", file)))
 
 
 # Simulation settings:
@@ -57,18 +57,26 @@ compute_mse <- function(par_est, par_true) {
 
 
 
-sapply(1:nrow(settings), function(i) {
+mse <- sapply(1:nrow(settings), function(i) {
   loadings <- extract_loadings(simres, n=settings[i,1], p = settings[i,2])
   if(!is.list(loadings)) return(0)
-  sapply(methods, function(method) {
+  mse <- sapply(methods, function(method) {
     compute_mse(loadings[[method]], loadings$true)
   })
 })
 
+colnames(mse) <- methods
 
 
-loadings <- extract_loadings(simres, 50, 20)
+
+
+loadings <- extract_loadings(simres, 500, 20)
 
 boxplot(loadings$ltm, outline=F)
+points(1:(ncol(loadings$gllvm)), loadings$true[1,], col=2)
 boxplot(loadings$sprime, outline=F)
+points(1:(ncol(loadings$gllvm)), loadings$true[1,], col=2)
+boxplot(loadings$prime, outline=F)
+points(1:(ncol(loadings$gllvm)), loadings$true[1,], col=2)
+boxplot(loadings$gmf, outline=F)
 points(1:(ncol(loadings$gllvm)), loadings$true[1,], col=2)

@@ -115,7 +115,7 @@ family <- binomial()
 rep <- 50
 q <- 2
 p.list <- c(20, 40)
-n.list <- c(50, 100, 500)
+n.list <- c(1000)
 
 
 # We compare 5 methods:
@@ -133,8 +133,7 @@ for(i in 1:nrow(settings)){
   n <- as.numeric(settings[i,1])
   p <- as.numeric(settings[i,2])
 
-  A[,1] <- seq(-2,2, l=p)
-  A[,2] <- seq(1, -1, l=p)
+  A <- matrix(runif(p*q,-2,2), p, q)
   B <- matrix(runif(p, -1,1), p,1)
 
   parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B)
