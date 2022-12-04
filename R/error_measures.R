@@ -22,7 +22,7 @@ MSE <- function(B1, B2) {
 
 MD <- function(Y, mu, family) {
   families <- generate_families(family, ncol(Y))
-  deviance <- fg$Y
+  deviance <- Y
   for (family in seq_along(unique(families$vec))) {
     id <- families$id[[family]]
     dev.resids <- families$objects[[family]]$dev.resids

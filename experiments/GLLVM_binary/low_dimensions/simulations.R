@@ -1,4 +1,4 @@
-
+stop("add Z!")
 
 est.gmf <- function(dat){
   tm <- proc.time()
@@ -130,6 +130,7 @@ cl <- parallel::makeCluster(detectCores()-2)
 parallel::clusterExport(cl, ls())
 
 for(i in 1:nrow(settings)){
+  set.seed(1231231+i)
   n <- as.numeric(settings[i,1])
   p <- as.numeric(settings[i,2])
 
