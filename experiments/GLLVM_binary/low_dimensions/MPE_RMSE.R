@@ -42,12 +42,12 @@ MSE.sims <- do.call(rbind, MSE.sims.list) %>% as_tibble()
 # MPE TABLE
 # Create the table (we took the median instead of the mean because gllvm is otherwise too bad. For the rest, it does not change the results much.)
 table_MPE <- MPE.sims %>% pivot_longer(all_of(methods), values_to="MPE", names_to="Estimator") %>% group_by(p, n, Estimator) %>% summarize(across(MPE,  ~round(mean(.),3))) %>%
-  pivot_wider(values_from="MPE", names_from="Estimator") %>% select(p, n, prime, sprime, ltm, gmf, mirtjml, gllvm)
+  pivot_wider(values_from="MPE", names_from="Estimator") %>% dplyr::select(p, n, prime, sprime, ltm, gmf, mirtjml, gllvm)
 
 knitr::kable(table_MPE, format = "latex")
 # MSE TABLE
 table_MSE <- MSE.sims %>% pivot_longer(all_of(methods), values_to="MPE", names_to="Estimator") %>% group_by(p, n, Estimator) %>% summarize(across(MPE,  ~round(mean(.),3))) %>%
-  pivot_wider(values_from="MPE", names_from="Estimator") %>% select(p, n, prime, sprime, ltm, gmf, mirtjml, gllvm)
+  pivot_wider(values_from="MPE", names_from="Estimator") %>% dplyr::select(p, n, prime, sprime, ltm, gmf, mirtjml, gllvm)
 
 knitr::kable(table_MSE, format = "latex")
 

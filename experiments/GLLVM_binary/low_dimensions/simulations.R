@@ -1,5 +1,3 @@
-stop("add Z!")
-
 est.gmf <- function(dat){
   tm <- proc.time()
   model.newton = gmf(Y = dat$Y, X = dat$X, p=dat$dimensions$q, maxIter = 100,
@@ -8,20 +6,24 @@ est.gmf <- function(dat){
 
   A <- model.newton$v
   B <- t(model.newton$beta)
+  Z <- model.newton$u
 
-  list(A=A, B=B, time=tmdiff)
+  list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
 est.gllvm <- function(dat){
   tm <- proc.time()
-  fit.gllvm <- gllvm(y= dat$Y, X= dat$X, formula = ~0 +., num.lv=dat$dimensions$q, family=binomial(link="logit"))
+  fit.gllvm <- gllvm(y= dat$Y, X= dat$X, formula = ~0 +., num.lv=dat$dimensions$q, family=binomial(link="logit"), method = "EVA", sd.errors=F)
   tmdiff <- proc.time()-tm
 
   coefs <- coefficients(fit.gllvm)
   A <- coefs$theta
   B <- coefs$Xcoef
+  Z <- as.matrix(fit.gllvm$lvs)
+  rownames(Z) <- NULL
+  colnames(Z) <- NULL
 
-  list(A=A, B=B, time=tmdiff)
+  list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
 est.sprime <- function(dat){
@@ -31,8 +33,9 @@ est.sprime <- function(dat){
   fit.sa <- update(fit.sa, alpha=.05)
   A <- fit.sa$parameters$A
   B <- fit.sa$parameters$B
+  Z <- fit.sa$Z
 
-  list(A=A, B=B, time=tmdiff)
+  list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
 
@@ -43,9 +46,17 @@ est.ltm <- function(dat) {
   if(q==2) fit.ltm <- ltm(dat$Y ~ z1 + z2)
   tmdiff <- proc.time()-tm
 
+
   A <- as.matrix(fit.ltm$coefficients[,2:(1 + dat$dimensions$q), drop=F])
   B <- as.matrix(fit.ltm$coefficients[,1, drop=F])
-  list(A=A, B=B, time=tmdiff)
+
+  fit.ltm.model <- dat
+  fit.ltm.model$parameters$A <- A
+  fit.ltm.model$parameters$B <- B
+
+  Z <- compute_Z(fit.ltm.model)$Z
+
+  list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
 est.prime <- function(dat){
@@ -55,8 +66,9 @@ est.prime <- function(dat){
   fit.sa <- update(fit.sa, alpha=.05)
   A <- fit.sa$parameters$A
   B <- fit.sa$parameters$B
+  Z <- fit.sa$Z
 
-  list(A=A, B = B, time=tmdiff)
+  list(A=A, B = B, Z=Z, time=tmdiff)
 }
 
 
@@ -67,8 +79,9 @@ est.mirtjml <- function(dat) {
   tmdiff <- proc.time()-tm
   A <- fit$A_hat
   B <- fit$d_hat
+  Z <- fit$theta_hat
 
-  list(A=A, B = B, time=tmdiff)
+  list(A=A, B = B, Z=Z, time=tmdiff)
 }
 
 est.all <- function(dat){
@@ -115,7 +128,7 @@ family <- binomial()
 rep <- 50
 q <- 2
 p.list <- c(20, 40)
-n.list <- c(1000)
+n.list <- c(100, 200, 500, 1000)
 
 
 # We compare 5 methods:
@@ -130,14 +143,14 @@ cl <- parallel::makeCluster(detectCores()-2)
 parallel::clusterExport(cl, ls())
 
 for(i in 1:nrow(settings)){
-  set.seed(1231231+i)
   n <- as.numeric(settings[i,1])
   p <- as.numeric(settings[i,2])
 
+  set.seed(1231231+i)
   A <- matrix(runif(p*q,-2,2), p, q)
   B <- matrix(runif(p, -1,1), p,1)
 
-  parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B)
+  parallel::parLapply(cl, 51:100, onesim, n=n, p=p, A=A, B=B)
   # Close cluster
 }
 parallel::stopCluster(cl)

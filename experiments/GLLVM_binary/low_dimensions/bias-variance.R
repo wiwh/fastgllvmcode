@@ -46,8 +46,6 @@ extract_loadings <- function(simres, n, p) {
   c(loadings, list(true = loadings_true))
 }
 
-
-
 # both par_est and par_true must be matrices
 compute_errors <- function(par_est, par_true) {
   bias2 <- mean((t(colMeans(par_est) - t(par_true)))^2)
@@ -82,6 +80,7 @@ loadings <- sapply(1:nrow(settings), function(i) {
   loadings <- lapply(methods, function(method){
     mse <- ma(colMeans((trim(loadings[[method]] - loadings$true, 3)^2)), 5)
     bias <- ma(colMeans(trim(loadings[[method]] - loadings$true, 3)), 5)
+
     tibble(mpe=sqrt(mse), bias=bias, true=ma(loadings$true[1,], 5)) %>% mutate(n=settings[i,1], p=settings[i,2], Estimator=method) %>%
       pivot_longer(-c(n, p, Estimator, true), values_to="Values", names_to="Errors")
   })
@@ -91,9 +90,10 @@ loadings <- sapply(1:nrow(settings), function(i) {
 loadings <- do.call(rbind, loadings)
 
 
-loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] + .05
+loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] - .05
 loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MSE", "bias"), levels=c("mpe", "bias")))
 
+# extrat errors due
 
 loadings %>% filter(p==40) %>% filter(Estimator %in% c("prime", "sprime",  "ltm", "mirtjml", "gmf")) %>%
   mutate(n=factor(n, labels=paste("n =", unique(n)), levels=unique(n)))%>%

@@ -39,7 +39,7 @@ est.prime <- function(dat){
 
 est.mirtjml <- function(dat) {
   tm <- proc.time()
-  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q, tol=1e-1)
+  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q, tol=1)
   tmdiff <- proc.time()-tm
   A <- fit$A_hat
   B <- fit$d_hat
@@ -81,7 +81,7 @@ onesim <- function(seed, n, p, A, B, setting){
   devtools::load_all()
   set.seed(seed)
   dat <-  gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A, B=B)
-  simres <- tryCatch(c(model=list(dat), est.all(dat), seed=seed, n=n, p=p), error=function(e) paste0("Error with seed=", seed, ", n=", n, ", p=",p, ", q=", 2 ))
+  simres <- tryCatch(c(model=list(dat), est.all(dat), seed=seed, n=n, p=p, setting=setting), error=function(e) paste0("Error with seed=", seed, ", n=", n, ", p=",p, ", q=", 2 ))
   saveRDS(simres, file=paste0("experiments/GLLVM_binary/large_dimensions/simres/n", n, "_p", p, "_seed", seed, "_setting", setting,".rds"))
 }
 
@@ -123,7 +123,7 @@ for(i in 1:nrow(settings)){
   B <- matrix(runif(p, -2,2), p,1)
   A <- gen_A(p, 5, setting=setting)
 
-  parallel::parLapply(cl, 1:6, onesim, n=n, p=p, A=A, B=B, setting)
+  parallel::parLapply(cl, 51:73, onesim, n=n, p=p, A=A, B=B, setting)
   # Close cluster
 }
 parallel::stopCluster(cl)

@@ -111,6 +111,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   }
 
   fg$parameters <- ma
+  fg$Z <- compute_Z(fg, start=fg$Z)$Z
   fg <- compute_mean(fg, return_object = T)
 
   if(!is.null(controls$hist)){
@@ -122,7 +123,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   fg$fit$hist <- if(controls$hist) history else NULL
   fg$controls <- controls
   fg$controls$alpha <- step_size
-  fg$Z <- compute_Z(fg, start=fg$Z)$Z
   fg
 }
 
