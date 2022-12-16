@@ -121,7 +121,7 @@ for(i in 1:nrow(settings)){
   B <- matrix(runif(p, -2,2), p,1)
   A <- gen_A(p, 5, setting=setting)
 
-  parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B, setting)
+  parallel::parLapply(cl, 1:10, onesim, n=n, p=p, A=A, B=B, setting)
   # Close cluster
 }
 parallel::stopCluster(cl)
