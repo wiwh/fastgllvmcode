@@ -1,7 +1,7 @@
 est.gmf <- function(dat){
   tm <- proc.time()
   model.newton = gmf(Y = dat$Y, X = dat$X, p=dat$dimensions$q, maxIter = 200,
-                     family=binomial(), intercept=F, method="quasi", tol=1e-5)
+                     family=poisson(), intercept=F, method="quasi", tol=1e-5)
   tmdiff <- proc.time()-tm
 
   A <- model.newton$v
@@ -11,9 +11,25 @@ est.gmf <- function(dat){
   list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
+est.gllvm <- function(dat){
+  tm <- proc.time()
+  fit.gllvm <- gllvm(y= dat$Y, X= dat$X, formula = ~0 +., num.lv=dat$dimensions$q, family=poisson(), method = "EVA", sd.errors=F)
+  # fit.gllvm <- gllvm(y = dat$Y, family="poisson", method="VA")
+  tmdiff <- proc.time()-tm
+
+  coefs <- coefficients(fit.gllvm)
+  A <- coefs$theta
+  B <- coefs$Xcoef
+  Z <- as.matrix(fit.gllvm$lvs)
+  rownames(Z) <- NULL
+  colnames(Z) <- NULL
+
+  list(A=A, B=B, Z=Z, time=tmdiff)
+}
+
 est.sprime <- function(dat){
   tm <- proc.time()
-  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "binomial", intercept = T, method="simple", alpha=.15, maxit=50)
+  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "poisson", intercept = T, method="simple", alpha=.15, maxit=100)
   tmdiff <- proc.time()-tm
   fit.sa <- update(fit.sa, alpha=.05, maxit=50)
   A <- fit.sa$parameters$A
@@ -26,9 +42,9 @@ est.sprime <- function(dat){
 
 est.prime <- function(dat){
   tm <- proc.time()
-  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "binomial", intercept = T, method="full", alpha=.15, maxit=50)
+  fit.sa <- fastgllvm(dat$Y, dat$dimensions$q, family = "poisson", intercept = T, method="full", alpha=.15, maxit=100)
   tmdiff <- proc.time()-tm
-  fit.sa <- update(fit.sa, alpha=fit.sa$controls$alpha * 1.5)
+  fit.sa <- update(fit.sa, alpha=.05)
   A <- fit.sa$parameters$A
   B <- fit.sa$parameters$B
   Z <- fit.sa$Z
@@ -36,23 +52,11 @@ est.prime <- function(dat){
   list(A=A, B=B, Z=Z, time=tmdiff)
 }
 
-
-est.mirtjml <- function(dat) {
-  tm <- proc.time()
-  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q, tol=1)
-  tmdiff <- proc.time()-tm
-  A <- fit$A_hat
-  B <- fit$d_hat
-  Z <- fit$theta_hat
-
-  list(A=A, B=B, Z=Z, time=tmdiff)
-}
-
 est.all <- function(dat){
   list(prime=est.prime(dat),
        sprime=est.sprime(dat),
-       gmf=est.gmf(dat),
-       mirtjml = est.mirtjml(dat)
+       # gllvm = est.gllvm(dat),
+       gmf=est.gmf(dat)
   )
 }
 
@@ -76,29 +80,26 @@ gen_A <- function(p, q, setting="A", prop=.4) {
 }
 
 onesim <- function(seed, n, p, A, B, setting){
+  library(gllvm)
   library(gmf)
-  library(mirtjml)
   devtools::load_all()
   set.seed(seed)
-  dat <-  gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A, B=B)
+  dat <-  gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="poisson", intercept = T, A = A, B=B)
   simres <- tryCatch(c(model=list(dat), est.all(dat), seed=seed, n=n, p=p, setting=setting), error=function(e) paste0("Error with seed=", seed, ", n=", n, ", p=",p, ", q=", 2 ))
-  saveRDS(simres, file=paste0("experiments/GLLVM_binary/large_dimensions/simres/n", n, "_p", p, "_seed", seed, "_setting", setting,".rds"))
+  saveRDS(simres, file=paste0("experiments/GLLVM_poisson/simres/n", n, "_p", p, "_seed", seed, "_setting", setting,".rds"))
 }
 
 
 devtools::load_all()
-library(ltm)
-library(mirtjml)
 library(gmf)
 library(gllvm)
 
 family <- binomial()
 
 # Simulation settings:
-rep <- 10
 q <- 5
-p.list <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)
-n.list <- c(500)
+p.list <- c(100, 200, 200, 300, 400, 500)
+n.list <- c(100, 500)
 setting <- c("A", "B")
 
 
@@ -114,7 +115,7 @@ cl <- parallel::makeCluster(detectCores()-2)
 # Run parallel computation
 parallel::clusterExport(cl, ls())
 
-for(i in 16:nrow(settings)){
+for(i in 1:nrow(settings)){
   n <- as.numeric(settings[i,1])
   p <- as.numeric(settings[i,2])
   setting <- settings[i,3]
@@ -123,7 +124,7 @@ for(i in 16:nrow(settings)){
   B <- matrix(runif(p, -2,2), p,1)
   A <- gen_A(p, 5, setting=setting)
 
-  parallel::parLapply(cl, 1:10, onesim, n=n, p=p, A=A, B=B, setting)
+  parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B, setting)
   # Close cluster
 }
 parallel::stopCluster(cl)
@@ -132,7 +133,7 @@ parallel::stopCluster(cl)
 # example
 if(0){
   devtools::load_all()
-  poisson  <- 0
+  poisson  <- 100
   gaussian <- 0
   binomial <- 100
   nobs <- 500
@@ -150,7 +151,7 @@ if(0){
   B <- matrix(runif(p*k, -2, 2), p, k)
   fg <- dat <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, A=A, B=B)
 
-  fit.fg <- fastgllvm(fg$Y, q=q, family="binomial", intercept=T, alpha=.2, maxit = 50)
+  fit.fg <- fastgllvm(fg$Y, q=q, family="poisson", intercept=T, alpha=.2, maxit = 50)
   plot(fit.fg)
 
   library(mirtjml)
