@@ -97,7 +97,7 @@ loadings <- do.call(rbind, loadings)
 
 
 # loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] - .05
-loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MSE", "bias"), levels=c("mpe", "bias")),
+loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MPE", "bias"), levels=c("mpe", "bias")),
                                 setting = factor(setting, labels=paste("Setting", c("A", "B")), levels=c("A", "B")))
 
 # extrat errors due
@@ -126,6 +126,7 @@ pB <- loadings %>% filter(setting=="Setting B", p %in% c(100, 500, 1000)) %>%
   ylab("") +
   ggtitle("Setting B") +
   theme(text=element_text(size=18))
+pB
 
 library(ggpubr)
 ggarrange(pA, pB, nrow=1, common.legend = TRUE, legend="bottom")

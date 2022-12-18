@@ -7,7 +7,7 @@ simres <- lapply(files, function(file) readRDS(paste0("experiments/GLLVM_poisson
 
 # Simulation settings:
 q <- 5
-p.list <- c(100, 200, 200, 300, 400, 500)
+p.list <- c(100, 200, 300, 400, 500, 1000)
 n.list <- c(100, 500)
 setting <- c("A", "B")
 
@@ -18,8 +18,6 @@ setting <- c("A", "B")
 settings <- expand.grid(n.list, p.list, setting)
 colnames(settings) <- c("n", "p", "setting")
 settings$setting <- as.character(settings$setting)
-
-settings <- settings[1:5,]
 
 
 # n x p x q x (model ,  5 methods)
@@ -101,12 +99,12 @@ loadings <- do.call(rbind, loadings)
 
 
 # loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] - .05
-loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MSE", "bias"), levels=c("mpe", "bias")),
+loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MPE", "bias"), levels=c("mpe", "bias")),
                                 setting = factor(setting, labels=paste("Setting", c("A", "B")), levels=c("A", "B")))
 
 # extrat errors due
 
-pA <- loadings %>% filter(setting=="Setting A", p %in% c(100, 200)) %>%
+pA <- loadings %>% filter(setting=="Setting A", p %in% c(100, 500, 1000), n==500) %>%
   mutate(p = factor(p, labels=paste("p =", (1:10)*100), levels=(1:10)*100)) %>%
   ggplot(aes(x=true, y=Values, col=Estimator)) +
   geom_smooth(size=.8, se=F) +
@@ -120,7 +118,7 @@ pA <- loadings %>% filter(setting=="Setting A", p %in% c(100, 200)) %>%
 pA
 
 
-pB <- loadings %>% filter(setting=="Setting B", p %in% c(100, 500, 1000)) %>%
+pB <- loadings %>% filter(setting=="Setting B", p %in% c(100, 500, 1000), n==500) %>%
   mutate(p = factor(p, labels=paste("p =", (1:10)*100), levels=(1:10)*100)) %>%
   ggplot(aes(x=true, y=Values, col=Estimator)) +
   geom_smooth(size=.8, se=F) +
@@ -131,7 +129,7 @@ pB <- loadings %>% filter(setting=="Setting B", p %in% c(100, 500, 1000)) %>%
   ggtitle("Setting B") +
   theme(text=element_text(size=18))
 
+pB
 library(ggpubr)
 ggarrange(pA, pB, nrow=1, common.legend = TRUE, legend="bottom")
-
-ggsave(file="experiments/GLLVM_binary/large_dimensions/binary_largedims_settingAB_bias-variance.png", width=13, height=7)
+ggsave(file="experiments/GLLVM_poisson/poisson_largedims_settingAB_bias-variance.png", width=13, height=7)

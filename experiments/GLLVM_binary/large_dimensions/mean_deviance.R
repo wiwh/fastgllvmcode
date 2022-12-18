@@ -44,7 +44,7 @@ extract_MD <- function(simres, n, p, setting) {
       fg$parameters$B <- sim[[method]]$B
       fg$parameters$Z <- sim[[method]]$Z
       fg$mean <- compute_mean(fg, return_object = F)$mean
-      mean(compute_deviance(fg))
+      median(compute_deviance(fg))
     })
   })
 }
@@ -72,24 +72,33 @@ saveRDS(errors, file="experiments/GLLVM_binary/large_dimensions/mean_deviance.rd
 
 errors <- readRDS("experiments/GLLVM_binary/large_dimensions/mean_deviance.rds")
 
+e2 <- errors %>% filter(p %in% c(100, 500, 1000)) %>% pivot_longer(-c(n, p, setting), names_to="Estimator", values_to = "MD") %>% mutate(n= paste0("n = ", n), p = factor(p, labels=paste0("p = ", c(100, 500, 1000)), levels=c(100,500,1000)), setting = paste0("Setting ", setting))
 
-
-
-
-spline_to_list <- function(series) {
-  sp <- smooth.spline(series, spar=.95)
-  tibble(p=seq(100, 1000, l=length(sp$y)), error=sp$y)
-}
-
-sp <- errors %>% pivot_longer(-c(n, p, setting), names_to="Estimator", values_to = "MD") %>% group_by(setting, Estimator) %>% summarize(across(MD, ~spline_to_list(.))) %>% ungroup() %>%
-  mutate(p = MD$p, error = MD$error) %>% mutate(MD=NULL) %>% as_tibble() %>% mutate(setting = factor(setting, levels=c("A", "B"), labels = paste("Setting", c("A", "B"))))
-ggplot(sp, aes(x=p, y=error, col=Estimator)) +
-  facet_grid(.~setting) +
-  geom_line(size=1) +
+ggplot(e2, aes(x=Estimator, y=MD, color=Estimator)) +
+  geom_boxplot() +
+  facet_grid(p~setting) +
+  ylab("Mean deviance") +
+  xlab("") +
   theme_bw() +
-  theme(text = element_text(size=20))+
-  scale_x_continuous()+
-  ylab("Mean Deviance")
-
+  theme(legend.position="none")
 
 ggsave(file="experiments/GLLVM_binary/large_dimensions/binary_largedims_mean_deviance.png", width=13, height=7)
+
+#
+# spline_to_list <- function(series) {
+#   sp <- smooth.spline(series, spar=.95)
+#   tibble(p=seq(100, 1000, l=length(sp$y)), error=sp$y)
+# }
+#
+# sp <- errors %>% pivot_longer(-c(n, p, setting), names_to="Estimator", values_to = "MD") %>% group_by(setting, Estimator) %>% summarize(across(MD, ~spline_to_list(.))) %>% ungroup() %>%
+#   mutate(p = MD$p, error = MD$error) %>% mutate(MD=NULL) %>% as_tibble() %>% mutate(setting = factor(setting, levels=c("A", "B"), labels = paste("Setting", c("A", "B"))))
+# ggplot(sp, aes(x=p, y=error, col=Estimator)) +
+#   facet_grid(.~setting) +
+#   geom_line(size=1) +
+#   theme_bw() +
+#   theme(text = element_text(size=20))+
+#   scale_x_continuous()+
+#   ylab("Mean Deviance")
+
+
+# ggsave(file="experiments/GLLVM_binary/large_dimensions/binary_largedims_mean_deviance.png", width=13, height=7)

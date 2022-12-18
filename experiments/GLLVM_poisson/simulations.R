@@ -96,7 +96,7 @@ library(gllvm)
 
 # Simulation settings:
 q <- 5
-p.list <- c(100, 200, 300, 400, 500)
+p.list <- c(1000)
 n.list <- c(100, 500)
 setting <- c("A", "B")
 
@@ -121,7 +121,7 @@ for(i in 1:nrow(settings)){
   B <- matrix(runif(p, -2,2), p,1)
   A <- gen_A(p, 5, setting=setting)
 
-  parallel::parLapply(cl, 1:50, onesim, n=n, p=p, A=A, B=B, setting)
+  parallel::parLapply(cl, 1:10, onesim, n=n, p=p, A=A, B=B, setting)
   # Close cluster
 }
 parallel::stopCluster(cl)

@@ -30,7 +30,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # Beginning of the iterations
   # ---------------------------
   for (i in 1:controls$maxit) {
-
     if (controls$hessian) hessian <- simulate_hessian_AB(fg)
 
     if (i < 20){
@@ -107,6 +106,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     ma <- update_moving_average(ma, fg$parameters, 0.9)
 
     fg$deviance <- mean(compute_deviance(fg))
+
     cat("\ni: ", i, "dev:", fg$deviance)
 
     if(!is.null(controls$hist)){
@@ -203,9 +203,9 @@ if(0) {
 
   devtools::load_all()
   poisson  <- 0
-  gaussian <- 50
-  binomial <- 0
-  nobs <- 100
+  gaussian <- 0
+  binomial <- 20
+  nobs <- 1000
   q <- 2
   p <- poisson + gaussian + binomial
 
@@ -278,6 +278,7 @@ if(0) {
   # full, with rescaling outside the loopa-
   set.seed(13342)
   fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- update(fit2, H=10, alpha=.1, maxit=20)
   plot(fit2)
   fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit2)
@@ -337,7 +338,7 @@ if(0) {
   points(fg$parameters$A, psych::Procrustes(fit5$parameters$A, fg$parameters$A)$loadings, col=5)
 
   points(fg$parameters$A, psych::Procrustes(fit.gmf$v, fg$parameters$A)$loadings, col=5)
-  points(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings, col=6)#, xlim=c(-5,5), ylim=c(-5,5))
+  points(fg$parameters$A, psych::Procrustes(fit.ltm$coefficients[,2:(1+q)], fg$parameters$A)$loadings, col=7)#, xlim=c(-5,5), ylim=c(-5,5))
   # points(fg$parameters$B, fit$parameters$B, pch=2, col=1)
   points(fg$parameters$A, psych::Procrustes(fit.mirtjml$A_hat, fg$parameters$A)$loadings, col=3)
   # points(fg$parameters$B, t(fit.gmf$beta), col=4)
