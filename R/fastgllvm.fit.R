@@ -91,7 +91,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     if (controls$rescale) {
       fg_rescaled <- rescale(fg, rescale.A = T, rescale.B = T, target.cov = fg$parameters$covZ)
       fg$parameters$A <- fg$parameters$A * .9 + fg_rescaled$parameters$A * .1
-      fg$parameters$B <- fg_rescaled$parameters$B * .95 + fg_rescaled$parameters$B * .05
+      fg$parameters$B <- fg$parameters$B * .95 + fg_rescaled$parameters$B * .05
       # fg$parameters$A <- fg_rescaled$parameters$A
       # fg$parameters$B <- fg_rescaled$parameters$B
       fg$Z <- fg_rescaled$Z
@@ -202,10 +202,10 @@ update_moving_average <- function(moving_average, parameters, weight) {
 if(0) {
 
   devtools::load_all()
-  poisson  <- 0
+  poisson  <- 100
   gaussian <- 0
-  binomial <- 20
-  nobs <- 1000
+  binomial <- 0
+  nobs <- 100
   q <- 2
   p <- poisson + gaussian + binomial
 
@@ -269,7 +269,7 @@ if(0) {
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=100, trim=.1, intercept=intercept, alpha=.2, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=500, trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   # fit1 <- update(fit1, H=10, maxit=10)
   plot(fit1)
   MPE(fit1$parameters$A, fg$parameters$A)
@@ -277,7 +277,7 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   fit2 <- update(fit2, H=10, alpha=.1, maxit=20)
   plot(fit2)
   fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
@@ -292,9 +292,9 @@ if(0) {
 
   # simple, with rescaling
   set.seed(13342)
-  fit4 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit4 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   plot(fit4)
-  fit4 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
+  it4 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit4)
 
   # Approx for large p
