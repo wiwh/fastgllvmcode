@@ -251,6 +251,7 @@ gen_fastgllvm <- function(nobs=100,
   variables <- gen_Y(Z=Z, X=X, parameters = parameters, families = families)
 
   if (miss.prob != 0) {
+    Y0 <- variables$Y
     variables$Y[runif(prod(dim(variables$Y))) < miss.prob] <- NA
     Miss <- is.na(variables$Y)
   } else {
@@ -267,6 +268,7 @@ gen_fastgllvm <- function(nobs=100,
     Miss = Miss
   )
 
+  if(!is.null(Miss)) fastgllvm$Y0 <- Y0
   fastgllvm$intercept <- intercept
   fastgllvm$parameters_true <- fastgllvm$parameters
 
