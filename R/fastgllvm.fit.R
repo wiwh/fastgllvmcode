@@ -30,9 +30,9 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # Beginning of the iterations
   # ---------------------------
   for (i in 1:controls$maxit) {
-  
+
     if (controls$hessian) hessian <- simulate_hessian_AB(fg)
-    
+
     if (i < 20){
       step_size = controls$alpha
     } else {
@@ -79,11 +79,6 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
       fg$parameters <- check_update_parameters(fg$parameters)
 
-      if(controls$hist) {
-        if(length(params_hist) > 50) params_hist[[1]] <- NULL
-        params_hist <- c(params_hist, list(fg$parameters))
-      }
-      
       # cat("\nSign:", signs)
     }
 
@@ -152,12 +147,12 @@ update_moving_average <- function(moving_average, parameters, weight) {
 if(0) {
 
   devtools::load_all()
-  poisson  <- 100
+  poisson  <- 0
   gaussian <- 0
-  binomial <- 10
+  binomial <- 4
   nobs <- 1000
   q <- 1
-  
+
   p <- poisson + gaussian + binomial
 
   intercept <- T
@@ -169,11 +164,11 @@ if(0) {
 
   set.seed(14240)
   fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
-  
+
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=500, trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=20, use_signs = F, H=1, rescale=F)
   # fit1 <- update(fit1, H=10, maxit=10)
 
   plot(fit1)
@@ -182,7 +177,7 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.3, intercept=intercept, alpha=1, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
   fit2 <- update(fit2, H=10, alpha=.1, maxit=20)
   plot(fit2)
   fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
