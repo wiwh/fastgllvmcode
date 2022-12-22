@@ -1,4 +1,5 @@
 devtools::load_all()
+library(mirtjlm)
 library(gmf)
 library(gllvm)
 

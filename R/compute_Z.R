@@ -14,7 +14,7 @@
 #' For computational speed, the convergence is checked for each observational unit `i` separately, and computations are vectorized across observations as much as possible.
 #' The `lambda` parameter is the regularization parameter. Setting it to 1 (the fault) returns the MAP. Higher values regularizes the values towards 0.
 
-compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, verbose=F, return_fastgllvm=F){
+compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, verbose=F, return_object=F){
   Zlist <- with(fg,{
     with(parameters, {
       if(is.null(B)) {
@@ -69,7 +69,7 @@ compute_Z <- function(fg, start=NULL, maxit=10, thresh=1e-3, lambda=1, save=F, v
     })
   })
 
-  if (return_fastgllvm) {
+  if (return_object) {
     fg$Z <- Zlist$Z
     fg$linpar <- Zlist$linpar
     fg$mean <- Zlist$linpar_bprime

@@ -36,7 +36,7 @@ compute_linpar_bprimeprime <- function(linpar, families) {
 }
 
 
-compute_mean <- function(fg, linpar=NULL, mean=TRUE) {
+compute_mean <- function(fg, linpar=NULL, mean=TRUE, return_object=F) {
   if (is.null(linpar)) {
     fg$linpar <- with(fg, compute_linpar(Z, parameters$A, X, parameters$B))$linpar
   } else {
@@ -46,5 +46,10 @@ compute_mean <- function(fg, linpar=NULL, mean=TRUE) {
   if (mean) {
     fg$mean <- compute_linpar_bprime(fg$linpar, fg$families)
   }
-  fg
+
+  if (return_object) {
+    return(fg)
+  } else {
+    return(list(mean=fg$mean, linpar=fg$linpar))
+  }
 }

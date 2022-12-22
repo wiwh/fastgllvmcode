@@ -7,6 +7,7 @@
 #' @param gradient_function: one of: "simple", "full", or a user-defined function.
 #' @param parameters.init: a list containing "A", "B", and "phi".
 #' @param hessian: one of "median", "F", or "T"
+#' @param hist: the last `hist` iterations are kept for the graph. Do not keep any if set to NULL.
 #' @description Fits a gllvm model.
 #'
 #' @details
@@ -45,18 +46,18 @@ fastgllvm <- function(Y,
                       intercept=T,
                       Z.init = NULL,
                       parameters.init=NULL,
-                      method="simple",
+                      method="full",
                       verbose = F,
-                      hist = T,
+                      hist = 100,
                       hessian = T,
                       use_signs = F,
                       trim = 0.2,
-                      alpha = 0,
+                      alpha = 0.2,
                       batch_size=nrow(Y),
                       maxit=100,
                       H=1,
                       H.seed = NULL,
-                      rescale=F) {
+                      rescale=T) {
 
   stopifnot(is.matrix(Y))
 
@@ -105,7 +106,6 @@ fastgllvm <- function(Y,
 
   fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
 
-
   fastgllvm.fit(fg, parameters.init=parameters.init, controls=controls)
 }
 
@@ -139,8 +139,11 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=l
 
 
 
-
-# TODO: check that Z has the correct dimensions
+#' Validates a fastgllvm object
+#'
+#' @param fastgllvm: a fastgllvm object
+#'
+#' Strives to find errors in the fastgllvm object to simplify debugging.
 validate_fastgllvm <- function(fastgllvm) {
   with(fastgllvm, {
     stopifnot(is.matrix(Y))
@@ -176,7 +179,6 @@ validate_fastgllvm <- function(fastgllvm) {
       if(any(rowcheck <- rowSums(!Miss) < (dimensions$q+1))) stop(paste0("Rows ", paste0(which(rowcheck), collapse = ","), " do not have enough observations."))
       if(any(colcheck <- colSums(!Miss) < (dimensions$q+1))) stop(paste0("Columns ", paste0(which(colcheck), collapse = ","), "do not have enough observations."))
     }
-
   })
 }
 

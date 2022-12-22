@@ -2,7 +2,7 @@
 % Please edit documentation in R/fastgllvm.R
 \name{fastgllvm}
 \alias{fastgllvm}
-\title{Fit a fastgllvm}
+\title{Fit a GLLVM using an M-estimator a stochatic approximation algorithm.}
 \usage{
 fastgllvm(
   Y,
@@ -14,17 +14,20 @@ fastgllvm(
   parameters.init = NULL,
   method = "simple",
   verbose = F,
-  hist = T,
+  hist = 100,
   hessian = T,
   use_signs = F,
   trim = 0.2,
   alpha = 0,
   batch_size = nrow(Y),
-  maxit = 100
+  maxit = 100,
+  H = 1,
+  H.seed = NULL,
+  rescale = F
 )
 }
 \arguments{
-\item{Y:}{a \code{n} times \code{p} matrix of observations}
+\item{Y:}{a \code{n} times \code{p} matrix, organized with the observations in the rows and the responses in the columns}
 
 \item{q:}{the number of factors}
 
@@ -39,6 +42,8 @@ fastgllvm(
 \item{parameters.init:}{a list containing "A", "B", and "phi".}
 
 \item{hessian:}{one of "median", "F", or "T"}
+
+\item{hist:}{the last \code{hist} iterations are kept for the graph. Do not keep any if set to NULL.}
 }
 \description{
 Fits a gllvm model.
