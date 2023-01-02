@@ -149,8 +149,8 @@ if(0) {
   devtools::load_all()
   poisson  <- 0
   gaussian <- 0
-  binomial <- 4
-  nobs <- 1000
+  binomial <- 3
+  nobs <- 200
   q <- 1
 
   p <- poisson + gaussian + binomial
@@ -168,7 +168,7 @@ if(0) {
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=20, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=200, use_signs = F, H=1, rescale=F)
   # fit1 <- update(fit1, H=10, maxit=10)
 
   plot(fit1)
@@ -177,11 +177,9 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.3, intercept=intercept, alpha=1, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=200, use_signs = F, H=1, rescale=T)
   fit2 <- update(fit2, H=10, alpha=.1, maxit=20)
   plot(fit2)
-  fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
-  fit2 <- update(fit2, H=10, maxit=10)
 
 
   # simple, with rescaling

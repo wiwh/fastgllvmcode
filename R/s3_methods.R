@@ -23,7 +23,7 @@ plot.fastgllvm <- function(f, plot.last=NULL){
   plot_id <- 1:min(100, f$dimensions$p*f$dimensions$q)
   iter <- (1:nrow(f$fit$hist$A))
   if(!is.null(plot.last))  iter <- iter[(length(iter) - min(length(iter), plot.last) + 1):length(iter)]
-  par(mfrow=c(3,2))
+  par(mfrow=c(2,2))
   ts.plot(f$fit$hist$A[iter,plot_id], main="Convergence plot: loadings.", xlab="Iteration", col=plot_id, lwd=2)
   points(rep(iter[length(iter)], length(plot_id)), as.vector(f$parameters$A)[plot_id], col=plot_id)
   if(!is.null(f$fit$hist$B)) {
@@ -31,7 +31,7 @@ plot.fastgllvm <- function(f, plot.last=NULL){
   }
   ts.plot(f$fit$hist$phi[iter,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
   ts.plot(f$fit$hist$deviance[iter], main = "Convergence plot: deviance.", xlab="Iteration", lwd=2)
-  ts.plot(f$fit$hist$covZ, main = "Convergence plot: covZ.", xlab="Iteration", col=1:f$dimensions$q**2, lwd=2)
+  # ts.plot(f$fit$hist$covZ, main = "Convergence plot: covZ.", xlab="Iteration", col=1:f$dimensions$q**2, lwd=2)
   par(mfrow=c(1,1))
 }
 
