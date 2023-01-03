@@ -101,7 +101,7 @@ compute_Z_hessian <- function(A, phi, linpar, families, lambda) {
   linpar_bprimeprime <- compute_linpar_bprimeprime(linpar, families)
   q <- ncol(A)
 
-  # TODO: this should be done with tensor products
+  # TODO: this should be done with tensor products, and the hessian should not be too small (resp. too big)
   if(q > 1) {
     lapply(1:nrow(linpar_bprimeprime), function(j) {
       - (t(A) %*% (A * (linpar_bprimeprime[j,] / phi)) + diag(q)*lambda)

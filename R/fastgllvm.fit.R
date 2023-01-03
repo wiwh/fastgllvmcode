@@ -1,5 +1,13 @@
-#' Fit a fastgllvm object for fitting a gllvm model.
+#' Title
 #'
+#' @param fg
+#' @param parameters.init
+#' @param controls
+#'
+#' @return
+#' @export
+#'
+#' @examples
 fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # Initialization
   # --------------
@@ -12,6 +20,16 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   } else {
     cat("\nInitial parameters set to the values from the supplied fit.")
   }
+
+  if (controls$method == "full") {
+    compute_gradient <- gradient_full
+  } else if (controls$method == "simple") {
+    compute_gradient <- gradient_simple
+  } else {
+    stop("Unknown gradient method 'method'.")
+  }
+
+  hessian <- NULL
 
   fg <- compute_mean(fg, return_object = T)
   fg$deviance <- mean(compute_deviance(fg))
@@ -30,14 +48,14 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
   # Beginning of the iterations
   # ---------------------------
   for (i in 1:controls$maxit) {
-  
-    if (controls$hessian) hessian <- simulate_hessian_AB(fg)
-    
-    if (i < 20){
-      step_size = controls$alpha
-    } else {
-      step_size = controls$alpha*20/i
+
+    if (controls$hessian) {
+      hessian_old <- hessian
+      hessian_new <- simulate_hessian_AB(fg)
+      hessian <- update_hessian(hessian_old, hessian_new, weight_old=.9)
     }
+
+    step_size = (controls$alpha + 5)/ (5+i)
 
     if(!is.null(controls$H.seed)) warning("The seed is beeing reset! This corresponds to the sample path method, not the SA method.")
 
@@ -50,47 +68,34 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       if (!is.null(controls$H.seed)) {
         set.seed(controls$H.seed)
       }
+      # Compute the simulated gradients
       if (controls$H > 1) {
         sims <- lapply(1:controls$H, function(na) {
-          compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
+          fg_simul <- simulate(fg_batch, return_object=TRUE)
+          compute_gradient(fg_simul)
         })
-        dA <- Reduce("+", lapply(sims, function(sim)sim$dA)) / length(sims)
-        dB <- Reduce("+", lapply(sims, function(sim)sim$dB)) / length(sims)
-        dphi <- Reduce("+", lapply(sims, function(sim)sim$dphi)) / length(sims)
-        covZ <- Reduce("+", lapply(sims, function(sim)sim$covZ)) / length(sims)
+        grad_simul <- list(
+          AB = Reduce("+", lapply(sims, function(sim)sim$AB)) / length(sims),
+          phi = Reduce("+", lapply(sims, function(sim)sim$phi)) / length(sims),
+          covZ = Reduce("+", lapply(sims, function(sim)sim$covZ)) / length(sims)
+        )
+        if(is.null(fg$parametersB)) grad_simul$B <- NULL
       } else {
-        dAB <- compute_dAB_centered(fg_batch, controls=controls, hessian=hessian)
-        dA <- dAB$dA
-        dB <- dAB$dB
-        dphi <- dAB$dphi
-        covZ <- dAB$covZ
+        fg_simul <- simulate(fg_batch, return_object=TRUE)
+
+        grad_simul <- compute_gradient(fg_simul)
       }
 
-      # updating all parameters
-      fg$parameters$A <- fg$parameters$A - trim(step_size * dA, controls$trim)
-      if (!is.null(fg$parameters$B)) {
-        fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
-      }
-
-      fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi*.1, controls$trim)
-
-      fg$parameters$covZ <- fg$parameters$covZ - min(step_size, .5) * (fg$parameters$covZ - covZ) # TODO: check if it's ok to do that... I think so... but this may add some dependence
-      # fg$parameters$covZ <- covZ # TODO: check if it's ok to do that... I think so... but this may add some dependence
-
-      fg$parameters <- check_update_parameters(fg$parameters)
-
-      if(controls$hist) {
-        if(length(params_hist) > 50) params_hist[[1]] <- NULL
-        params_hist <- c(params_hist, list(fg$parameters))
-      }
-      
-      # cat("\nSign:", signs)
+      grad_batch <- compute_gradient(fg_batch)
+      fg$parameters <- compute_parameters_update(fg_batch, step_size, hessian, grad_batch, grad_simul, controls)
     }
 
+    # Update Z and the estimated means after the parameter update
     fg <- compute_Z(fg, start=fg$Z, return_object = T)
     fg <- compute_mean(fg, return_object = T)  # TODO: compute mean based on ma mayhaps?
 
-    # rescale the model
+
+    # Rescale the model: this helps the training, but does not affect the result
     if (controls$rescale) {
       fg_rescaled <- rescale(fg, rescale.A = T, rescale.B = T, target.cov = fg$parameters$covZ)
       fg$parameters$A <- fg$parameters$A * .9 + fg_rescaled$parameters$A * .1
@@ -100,9 +105,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
       fg$Z <- fg_rescaled$Z
     }
 
-
-    # fg$parameters$phi <- compute_phi(fg)
-    # impute for Y
+    # Impute values for Y
     if(!is.null(fg$Miss)) {
       fg$Y[fg$Miss] <- fg$mean[fg$Miss]
     }
@@ -110,7 +113,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
 
     fg$deviance <- mean(compute_deviance(fg))
 
-    cat("\ni: ", i, "dev:", fg$deviance)
+    cat("\nIteration: ", i, "dev:", fg$deviance, "range: ", range(fg$parameters$A))
 
     if(!is.null(controls$hist)){
       if (length(params_hist) > controls$hist) params_hist[[1]] <- NULL
@@ -128,7 +131,7 @@ fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
     }, simplify=F)
   }
 
-  fg$fit$hist <- if(controls$hist) history else NULL
+  fg$hist <- if(controls$hist) history else NULL
   fg$controls <- controls
   fg$controls$alpha <- step_size
   fg
@@ -142,22 +145,30 @@ update_signs_count <- function(signs_count, signs_old, signs_new) {
 }
 
 # update moving average
-
 update_moving_average <- function(moving_average, parameters, weight) {
   sapply(names(moving_average), function(par) {
     moving_average[[par]] <- weight * moving_average[[par]] + (1 - weight) *parameters[[par]]
   }, simplify=F)
 }
 
-if(0) {
+# update hessian
+update_hessian <- function(hessian_old, hessian_new, weight_old) {
+  if (is.null(hessian_old)) {
+    return(hessian_new)
+  }
+  lapply(seq_along(hessian_old), function(h_i){
+    weight_old * hessian_old[[h_i]]  + (1-weight_old) * hessian_new[[h_i]]
+  })
+}
 
+if(0) {
   devtools::load_all()
-  poisson  <- 100
+  poisson  <- 0
   gaussian <- 0
-  binomial <- 10
-  nobs <- 1000
+  binomial <- 4
+  nobs <- 200
   q <- 1
-  
+
   p <- poisson + gaussian + binomial
 
   intercept <- T
@@ -169,11 +180,15 @@ if(0) {
 
   set.seed(14240)
   fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
-  
+
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="full", batch_size=500, trim=.1, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit1 <- fastgllvm(fg$Y, q = q, family=family, maxit=100, hist=200, method="full", trim=.1, intercept=intercept, alpha=.5, hessian=T, rescale=T)
+  plot(fit1)
+  fit1 <- update(fit1, rescale=F)
+  plot(fit1)
+
   # fit1 <- update(fit1, H=10, maxit=10)
 
   plot(fit1)
@@ -182,8 +197,8 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
-  fit2 <- update(fit2, H=10, alpha=.1, maxit=20)
+  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.5, intercept=intercept, alpha=.1, hessian=T, maxit=20, use_signs = F, H=1, rescale=T)
+  fit2 <- update(fit2, H=1, alpha=.05, maxit=50)
   plot(fit2)
   fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   fit2 <- update(fit2, H=10, maxit=10)
@@ -191,7 +206,7 @@ if(0) {
 
   # simple, with rescaling
   set.seed(13342)
-  fit3 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=100, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=T)
+  fit3 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=100, trim=.1, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   plot(fit3)
   fit3 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit3)

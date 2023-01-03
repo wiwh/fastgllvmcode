@@ -17,21 +17,21 @@ predict.fastgllvm <- function(f, method=c("fastgllvm", "glm", "glmnet")){
 # Plot the fastgllvm object
 #' @export
 plot.fastgllvm <- function(f, plot.last=NULL){
-  if(length(f$fit) == 0) {
+  if(is.null(f$hist)) {
     stop("Fit the model before attempting to plot.")
   }
   plot_id <- 1:min(100, f$dimensions$p*f$dimensions$q)
-  iter <- (1:nrow(f$fit$hist$A))
+  iter <- (1:nrow(f$hist$A))
   if(!is.null(plot.last))  iter <- iter[(length(iter) - min(length(iter), plot.last) + 1):length(iter)]
   par(mfrow=c(3,2))
-  ts.plot(f$fit$hist$A[iter,plot_id], main="Convergence plot: loadings.", xlab="Iteration", col=plot_id, lwd=2)
+  ts.plot(f$hist$A[iter,plot_id], main="Convergence plot: loadings.", xlab="Iteration", col=plot_id, lwd=2)
   points(rep(iter[length(iter)], length(plot_id)), as.vector(f$parameters$A)[plot_id], col=plot_id)
-  if(!is.null(f$fit$hist$B)) {
-    ts.plot(f$fit$hist$B[iter,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
+  if(!is.null(f$hist$B)) {
+    ts.plot(f$hist$B[iter,1:min(100, f$dimensions$p)], main="Convergence plot: betas.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
   }
-  ts.plot(f$fit$hist$phi[iter,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
-  ts.plot(f$fit$hist$deviance[iter], main = "Convergence plot: deviance.", xlab="Iteration", lwd=2)
-  ts.plot(f$fit$hist$covZ, main = "Convergence plot: covZ.", xlab="Iteration", col=1:f$dimensions$q**2, lwd=2)
+  ts.plot(f$hist$phi[iter,1:min(100, f$dimensions$p)], main = "Convergence plot: communalities.", xlab="Iteration", col=1:min(100, f$dimensions$p), lwd=2)
+  ts.plot(f$hist$deviance[iter], main = "Convergence plot: deviance.", xlab="Iteration", lwd=2)
+  ts.plot(f$hist$covZ, main = "Convergence plot: covZ.", xlab="Iteration", col=1:f$dimensions$q**2, lwd=2)
   par(mfrow=c(1,1))
 }
 
@@ -77,12 +77,12 @@ subset.fastgllvm  <- function(fastgllvm, index) {
 #' @param value: a fastgllvm object with the simulations
 #' @param conditional: should the simulation be conditional on fastgllvm$Z?
 #' @export
-simulate.fastgllvm <- function(fastgllvm, nsim=1, conditional=F, return_fastgllvm=F){
+simulate.fastgllvm <- function(fastgllvm, nsim=1, conditional=F, return_object=F){
   if(!conditional) {
     fastgllvm$Z <- with(fastgllvm, gen_Z(dimensions$n, dimensions$q))
   }
   simu <- with(fastgllvm, gen_Y(Z=Z, X=X, parameters = parameters, families = families))
-  if (return_fastgllvm) {
+  if (return_object) {
     fastgllvm$Y <- simu$Y
     fastgllvm$Z <- simu$Z
     fastgllvm$linpar <- simu$linpar

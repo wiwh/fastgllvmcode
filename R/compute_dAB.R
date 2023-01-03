@@ -1,129 +1,3 @@
-# delete_initialize_parameters_simple <- function(parameters, dimensions) {
-#   with(dimensions, {
-#     if (is.null(parameters$A)) parameters$A <- matrix(0, p, q)
-#     if (is.null(parameters$B)) parameters$B <- matrix(0, p, k)
-#     if (is.null(parameters$phi)) parameters$phi <- rep(1, p)
-#     # if (is.null(Z)) Z <- matrix(0, n, q)
-#     if (is.null(parameters$covZ)) parameters$covZ <- diag(q)
-#
-#     # Control parameters
-#     stopifnot(is.matrix(parameters$A) && dim(parameters$A) == c(p, q))
-#     stopifnot(is.matrix(parameters$B) && dim(parameters$B) == c(p, k))
-#     stopifnot(is.vector(parameters$phi) && length(parameters$phi) == p)
-#     # stopifnot(is.matrix(Z) && dim(Z) == c(n, q))
-#     stopifnot(is.matrix(parameters$covZ) && dim(parameters$covZ) == c(q,q))
-#     parameters
-#   })
-# }
-
-# initialize_gradients_simple <- function(parameters) {
-#   sapply(parameters, function(par) par*0, simplify=F)
-# }
-
-compute_dAB_centered <- function(fg, controls, hessian) {
-  # Update main values and compute gradient of the sample
-  fg$Z <- compute_Z(fg, start=fg$Z, maxit=10)$Z # TODO: maybe reduce to a maxit of 1?
-  # TODO: compare with the linpar obtained from comp_Z: if it is the same, take it.... and take the mean too
-  fg <- compute_mean(fg, return_object=T) # TODO: check if we need this here
-
-  # experimental vvvvv
-  if (controls$method=="approx") {
-    fg_simulated <- fg
-    fg_simulated$Z <- scale(gen_Z(fg$dim$n, fg$dimensions$q), scale=F)
-    fg_simulated <- compute_mean(fg_simulated, return_object = T)
-
-    dAB <- t(fg_simulated$mean) %*% cbind(fg_simulated$Z, fg_simulated$X) -t(fg$Y) %*% cbind(fg$Z, fg$X)
-    dAB <- AB_separate(dAB, fg$dimensions)
-    # these are placeholders
-    dphi <- rep(0, fg$dimensions$p)
-    covZ <- diag(1, fg$dimensions$q)
-
-    dphi_sample <- compute_phi(fg)
-    dphi_simulated <- compute_phi(fg_simulated)
-
-    dphi <- dphi_simulated - dphi_sample
-
-
-  # experimental ^^^^^
-  # # experimental vvvvv
-  # } else if (controls$method == "rescaled") {
-  #   # Simulate a sample
-  #   fg_simulated <- simulate(fg, return_fastgllvm=T)
-  #   fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
-  #
-  #
-  #   fg_simulated_rescaled <- fg_simulated
-  #   fg_simulated_rescaled <- compute_mean(fg_simulated_rescaled)
-  #
-  #   # Compute the centered gradients on both the sample and simulated fastgllvm objects
-  #   fg_rescaled <- rescale(fg, rescale.A= FALSE, rescale.B= TRUE, target.cov = cov(fg_simulated$Z))
-  #   fg_rescaled <- compute_mean(fg_rescaled)
-  #
-  #   dAB_sample <- compute_dAB(fg_rescaled, controls$method)
-  #   dAB_simulated <- compute_dAB(fg_simulated_rescaled, controls$method)
-  #
-  #
-  #   if (is.null(hessian)) {
-  #     dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
-  #   } else {
-  #     dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
-  #   }
-  #
-  #   if (controls$use_signs) {
-  #     dAB <- sign(dAB)
-  #   }
-  #   dAB <- AB_separate(dAB, fg$dimensions)
-  #
-  #   dphi_sample <- compute_phi(fg_rescaled)
-  #   dphi_simulated <- compute_phi(fg_simulated_rescaled)
-  #
-  #   dphi <- dphi_simulated - dphi_sample
-  #
-  #   covZ <- cov(fg_simulated$Z)
-
-  # experimental ^^^^^
-  } else {
-    # Simulate a sample
-    fg_simulated <- simulate(fg, return_fastgllvm=T)
-    fg_simulated$Z <- compute_Z(fg_simulated, start=fg_simulated$Z, maxit=10)$Z
-    fg_simulated <- compute_mean(fg_simulated, return_object = T)
-
-    # Compute the centered gradients on both the sample and simulated fastgllvm objects
-    dAB_sample <- compute_dAB(fg, controls$method)
-    dAB_simulated <- compute_dAB(fg_simulated, controls$method)
-
-
-    if (is.null(hessian)) {
-      dAB <- dAB_simulated - dAB_sample # multiplied by -1 because the hessian is absent and we want to maximize, not minimize
-    } else {
-      dAB <- mult_invHessian_dAB(dAB_sample - dAB_simulated, hessian)
-    }
-
-    if (controls$use_signs) {
-      dAB <- sign(dAB)
-    }
-    dAB <- AB_separate(dAB, fg$dimensions)
-
-    if(!is.null(fg$Miss)) {
-      fg_simulated$Y[fg$Miss] <- fg_simulated$mean[fg$Miss]
-    }
-    dphi_sample <- compute_phi(fg)
-    dphi_simulated <- compute_phi(fg_simulated)
-
-    dphi <- dphi_simulated - dphi_sample
-
-    covZ <- cov(fg_simulated$Z)
-  }
-
-
-  # dcovZ <- cov(fg$Z) - cov(fg_simulated$Z)
-
-
-  # TODO: compare to the old method below, they need to get the same thing!!
-  list(dA = dAB$A, dB=dAB$B, fg=fg, covZ=covZ, dphi=dphi)#, dcovZ=dcovZ)
-}
-
-
 compute_dAB <- function(fg, method) {
   with(fg, {
     if (dimensions$k == 0) {
@@ -136,29 +10,12 @@ compute_dAB <- function(fg, method) {
       dAB <- t(Y) %*% (ZX/dimensions$n)
     } else if (method == "full") {
       dAB <- t(Y - mean) %*% (ZX/dimensions$n)
-    } else if (method == "approx") {
-      dAB <- t(mean) %*% ZX /dimensions$n
-
-    # TODO: remove the method
-    } else if (method == "rescaled") {
-      dAB <- t(Y - mean) %*% (ZX/dimensions$n)
     } else {
       stop ("Unkown method `method`")
     }
     dAB
   })
 }
-
-#
-# compute_psi_simple_phi <- function(Y, parameters, families) {
-#   psi_phi <- parameters$phi * 0
-#   if(length(families$id$gaussian) > 0) {
-#     # wrong psi_phi[families$id$gaussian] <- colMeans(Y[,families$id$gaussian, drop=F]^2) - rowSums(parameters$A[families$id$gaussian,, drop=F]^2)
-#     psi_phi[families$id$gaussian] <- colMeans(scale(Y[,families$id$gaussian, drop=F], scale=F)^2)# - rowSums(parameters$A[families$id$gaussian,, drop=F]^2)
-#     # psi_phi[families$id$gaussian] <- colMeans(Y*linpar) # - colMeans(linpar**2)
-#   }
-#   psi_phi/10
-# }
 
 
 if(0) {
