@@ -116,8 +116,8 @@ initialize_learning_rate <- function(maxit, learning_rate.args=list(method="spal
 }
 
 
-#' Given a fastgllvm object, compute good intial values.
-#' @param fastgllvm: an object of class ''fastgllvm''
+#' Given a gllvmprime object, compute good intial values.
+#' @param gllvmprime: an object of class ''gllvmprime''
 #' @param target: if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target
 #' @param rescale: if true, both Z and A will be rescaled so that Z%*%t(A) remains unchanged but Z has unit variance.
 initialize_parameters <- function(fg, target=NULL, rescale=F, return_object = F) {
@@ -281,7 +281,7 @@ rescale.old <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
 
 if(0) {
   devtools::load_all()
-  fg <- gen_fastgllvm(n= 100, p=10, q=3, k=1, intercept=T, family="gaussian")
+  fg <- gen_gllvmprime(n= 100, p=10, q=3, k=1, intercept=T, family="gaussian")
   linpar0 <- with(fg$parameters, compute_linpar(Z, A, fg$X, B))
   resc <- rescale(fg$parameters, rescale.A=T, rescale.B=1)
   linpar1 <- with(resc, compute_linpar(Z, A, fg$X, B))
@@ -297,8 +297,8 @@ if(0) {
 if(0) {
   devtools::load_all()
   set.seed(1231)
-  fg <- gen_fastgllvm(nobs=1000, p=1000, q=20, family=c(rep("poisson", 500), rep("gaussian", 0), rep("binomial", 500)), k=1, intercept=1, miss.prob = 0.5)
-  fg <- gen_fastgllvm(nobs=1000, p=100, q=10, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
+  fg <- gen_gllvmprime(nobs=1000, p=1000, q=20, family=c(rep("poisson", 500), rep("gaussian", 0), rep("binomial", 500)), k=1, intercept=1, miss.prob = 0.5)
+  fg <- gen_gllvmprime(nobs=1000, p=100, q=10, family=c(rep("poisson", 0), rep("gaussian", 0), rep("binomial", 100)), k=1, intercept=F, miss.prob = 0)
   init <- compute_parameters_initial_values(fg, target=fg$parameters$A, rescale=F)
 
   plot(fg$parameters$A, init$A); abline(0,1,col=2)

@@ -41,7 +41,7 @@ if(0) {
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(1030)
-  fg <- gen_fastgllvm(nobs=100000, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, A=matrix(sample(seq(-2, 2, l=p*q)),p, q), intercept=F, miss.prob = 0, scale=1)
+  fg <- gen_gllvmprime(nobs=100000, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, A=matrix(sample(seq(-2, 2, l=p*q)),p, q), intercept=F, miss.prob = 0, scale=1)
   gradient <- gradient_full(fg)
 
   fg$parameters$A <- fg$parameters$A * 2
@@ -55,7 +55,7 @@ if(0) {
   sim <- sapply(1:100, function(i){
     set.seed(i)
     if(i%%10==0 || i==1) cat("\n", i)
-    fg_sim1 <- gen_fastgllvm(nobs=1000, p=p, q=q, A= fg$parameters$A, B = fg$parameters$B, phi=fg$parameters$phi, family=family, k=1, intercept=T)
+    fg_sim1 <- gen_gllvmprime(nobs=1000, p=p, q=q, A= fg$parameters$A, B = fg$parameters$B, phi=fg$parameters$phi, family=family, k=1, intercept=T)
     g1 <- gradient_full(fg_sim1)
 
 

@@ -1,4 +1,4 @@
-compute_phi <- function(fg, return_fastgllvm=F) {
+compute_phi <- function(fg, return_gllvmprime=F) {
   if (!is.null(fg$families$id$gaussian)) {
     if (!is.null(fg$Miss)) {
       # denominator <- colSums(!fg$Miss)

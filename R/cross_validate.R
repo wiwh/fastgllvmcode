@@ -44,18 +44,18 @@ if(k==0 & intercept) k <- 1
 
 family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
 set.seed(14240)
-fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
+fg <- gen_gllvmprime(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
 
-fit <- fastgllvm(fg$Y, q=1, family=family, H=1, alpha=.2, maxit = 50)
+fit <- gllvmprime(fg$Y, q=1, family=family, H=1, alpha=.2, maxit = 50)
 cv1 <- crossvalidate(fit, 3)
 
-fit <- fastgllvm(fg$Y, q=2, family=family, H=1, alpha=.2, maxit = 50)
+fit <- gllvmprime(fg$Y, q=2, family=family, H=1, alpha=.2, maxit = 50)
 cv2 <- crossvalidate(fit, 3)
-fit <- fastgllvm(fg$Y, q=3, family=family, H=1, alpha=.2, maxit = 50)
+fit <- gllvmprime(fg$Y, q=3, family=family, H=1, alpha=.2, maxit = 50)
 cv3 <- crossvalidate(fit, 3)
-fit <- fastgllvm(fg$Y, q=4, family=family, H=1, alpha=.2, maxit = 50)
+fit <- gllvmprime(fg$Y, q=4, family=family, H=1, alpha=.2, maxit = 50)
 cv4 <- crossvalidate(fit, 3)
-fit <- fastgllvm(fg$Y, q=5, family=family, H=1, alpha=.2, maxit = 50)
+fit <- gllvmprime(fg$Y, q=5, family=family, H=1, alpha=.2, maxit = 50)
 cv5 <- crossvalidate(fit, 3)
 
 

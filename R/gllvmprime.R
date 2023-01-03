@@ -28,9 +28,9 @@
 #' p <- length(family)
 #' set.seed(1234)
 #' # Simulate data
-#' data <- gen_fastgllvm(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
+#' data <- gen_gllvmprime(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
 #' # Fit the data
-#' fit <- fastgllvm(data$Y, q = q, X=data$X, family=family,  intercept = 1, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+#' fit <- gllvmprime(data$Y, q = q, X=data$X, family=family,  intercept = 1, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
 #' # Evaluate the fit
 #' plot(fit)
 #' If necessary, update the fit.
@@ -39,7 +39,7 @@
 #' plot(fit)
 #' @export
 
-fastgllvm <- function(Y,
+gllvmprime <- function(Y,
                       q=1,
                       family="gaussian",
                       X=NULL,
@@ -104,15 +104,15 @@ fastgllvm <- function(Y,
     Miss <- NULL
   }
 
-  fg <- new_fastgllvm(Y, X, Z.init, parameters.init, families, dimensions, Miss)
+  fg <- new_gllvmprime(Y, X, Z.init, parameters.init, families, dimensions, Miss)
 
-  fastgllvm.fit(fg, parameters.init=parameters.init, controls=controls)
+  gllvmprime.fit(fg, parameters.init=parameters.init, controls=controls)
 }
 
 # Constructor
 # -----------
 
-#' Generates a fastgllvm object
+#' Generates a gllvmprime object
 #'
 #' @param A the matrix of loadings.
 #' @param B the matrix of fixed effect coefficients, of dimensions p * k
@@ -120,8 +120,8 @@ fastgllvm <- function(Y,
 #' @param X either 0 (no covariates, no intercept), 1 (an intercept), or a matrix of n * k covariates (with, possibly, the first column of 1s being an intercept)
 #'
 #' @return a list corresponding to the model
-new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=list()) {
-  fastgllvm <- structure(
+new_gllvmprime <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=list()) {
+  gllvmprime <- structure(
     list(Y=Y,
          X=X,
          Z=Z,
@@ -130,22 +130,22 @@ new_fastgllvm <- function(Y, X, Z, parameters, families, dimensions, Miss, fit=l
          dimensions=dimensions,
          Miss=Miss,
          fit=fit),
-    class="fastgllvm")
+    class="gllvmprime")
 
-  validate_fastgllvm(fastgllvm)
+  validate_gllvmprime(gllvmprime)
 
-  fastgllvm
+  gllvmprime
 }
 
 
 
-#' Validates a fastgllvm object
+#' Validates a gllvmprime object
 #'
-#' @param fastgllvm: a fastgllvm object
+#' @param gllvmprime: a gllvmprime object
 #'
-#' Strives to find errors in the fastgllvm object to simplify debugging.
-validate_fastgllvm <- function(fastgllvm) {
-  with(fastgllvm, {
+#' Strives to find errors in the gllvmprime object to simplify debugging.
+validate_gllvmprime <- function(gllvmprime) {
+  with(gllvmprime, {
     stopifnot(is.matrix(Y))
     #' Check whether the parameters are correctly specified
     if(!is.null(parameters)) {
@@ -190,7 +190,7 @@ validate_fastgllvm <- function(fastgllvm) {
 #' Generates a GLLVM model.
 #'
 #' Returns an (unfitted) gllvm model of class "fastglllvm" with simulated data.
-#' Because it is a fastgllvm object, it has components such as "hist" that are NULL
+#' Because it is a gllvmprime object, it has components such as "hist" that are NULL
 #' since no fit actually took place.
 #'
 #' This function is useful for experimentation.
@@ -205,7 +205,7 @@ validate_fastgllvm <- function(fastgllvm) {
 #'
 #' @return a list corresponding to the model
 #' @export
-gen_fastgllvm <- function(nobs=100,
+gen_gllvmprime <- function(nobs=100,
                           p=5,
                           q=1,
                           k=1,
@@ -258,7 +258,7 @@ gen_fastgllvm <- function(nobs=100,
     Miss <- NULL
   }
 
-  fastgllvm <- new_fastgllvm(
+  gllvmprime <- new_gllvmprime(
     Y=variables$Y,
     Z=variables$Z,
     X=X,
@@ -268,12 +268,12 @@ gen_fastgllvm <- function(nobs=100,
     Miss = Miss
   )
 
-  if(!is.null(Miss)) fastgllvm$Y0 <- Y0
-  fastgllvm$intercept <- intercept
-  fastgllvm$parameters_true <- fastgllvm$parameters
+  if(!is.null(Miss)) gllvmprime$Y0 <- Y0
+  gllvmprime$intercept <- intercept
+  gllvmprime$parameters_true <- gllvmprime$parameters
 
-  validate_fastgllvm(fastgllvm)
-  fastgllvm
+  validate_gllvmprime(gllvmprime)
+  gllvmprime
 }
 
 
@@ -366,17 +366,17 @@ if(0) {
     if(k==0 & intercept) k <- 1
     family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
     set.seed(10030)
-    fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
+    fg <- gen_gllvmprime(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
 
     plot(simulate(fg, conditional=T)$Y, fg$Y)
     # check initialization
     # set.seed(123)
-    # fit <- fastgllvm(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
+    # fit <- gllvmprime(fg$Y, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=100,alpha=.5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="constant")), median=F)
     # plot(fit)
     set.seed(1304)
-    fit.simple <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.5, batch_size=12)
+    fit.simple <- gllvmprime(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=200, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=2)), method="simple", median=.5, batch_size=12)
     # set.seed(1304)
-    # fit.full <- fastgllvm(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=500, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="full", median=.2)
+    # fit.full <- gllvmprime(fg$Y, X= fg$X, q = q, family=family,  intercept = T, hist=T, controls = list(maxit=500, alpha=5, beta=0, eps=1e-10, learning_rate.args=list(end=0.01, method="spall", rate=10)), method="full", median=.2)
 
     plot(fit.simple)
     # plot(fit.full)
@@ -462,7 +462,7 @@ if(0) {
   attach(data_sim)
   # run the exploratory analysis
   res <- mirtjml_expr(data_sim$response, data_sim$K, tol = 1e-1)
-  fit.fg <- fastgllvm(data_sim$response, data_sim$K, family="binomial", controls=list(eps=1e-4))
+  fit.fg <- gllvmprime(data_sim$response, data_sim$K, family="binomial", controls=list(eps=1e-4))
 
   plot(data_sim$A, psych::Procrustes(fit.fg$parameters$A, data_sim$A)$loadings, xlim=c(0,1.5), ylim=c(-.1, 2), pch=19); abline(h=0, col=2); abline(0,1,col=2)
   points(data_sim$A, psych::Procrustes(res$A_hat, data_sim$A)$loadings, col=2, pch=1)
@@ -474,7 +474,7 @@ if(0) {
   compute_error(matrix(res$d_hat), matrix(data_sim$d))
 }
 if(0){
-  fastgllvm.fit <- function(Y, X, A.init=NULL, B.init=NULL, phi.init=NULL, Z.init=NULL, H=1, maxit=250 , tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
+  gllvmprime.fit <- function(Y, X, A.init=NULL, B.init=NULL, phi.init=NULL, Z.init=NULL, H=1, maxit=250 , tol=1e-5, learning_rate = NULL,  learning_rate.args = NULL, verbose = T ){
     if(is.null(learning_rate)) learning_rate <- ifelse(method=="SA", "exp", "constant")
     if(is.character(learning_rate)){
       learning_rate <- ff_learning_rate(method=learning_rate, maxit=maxit, learning_rate.args = learning_rate.args)
@@ -545,8 +545,8 @@ if(0){
                               hist$crit <- hist$crit[1:(hist.i + i)]
                             }
                           }
-    class(fastgllvm) <- "fastgllvm"
-    fastgllvm
+    class(gllvmprime) <- "gllvmprime"
+    gllvmprime
   }
 }
 

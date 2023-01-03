@@ -1,6 +1,6 @@
 #' Computes the linear parameter
 #'
-#' @inheritParams fastgllvm
+#' @inheritParams gllvmprime
 compute_linpar <- function(Z, A, X, B=NULL, XB=NULL) {
   ZA <- Z %*% t(A)
   if (is.null(B) & is.null(XB)) {

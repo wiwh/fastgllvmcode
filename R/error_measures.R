@@ -18,7 +18,7 @@ MSE <- function(B1, B2) {
 #' Compute the Mean Deviance of a fitted model
 #'
 #' @param mu: matrix of estimated means
-#' @inheritParams fastgllvm
+#' @inheritParams gllvmprime
 
 MD <- function(Y, mu, family) {
   families <- generate_families(family, ncol(Y))

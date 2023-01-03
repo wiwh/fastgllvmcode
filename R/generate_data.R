@@ -35,7 +35,7 @@ gen_binom_fast <- function(linpar, size, nobs, p){ # GEN BINOM FAST!
 #' Generates responses from a gllvm, given all parameters and values
 #'
 #' Returns a matrix Y
-#' @inheritParams fastgllvm
+#' @inheritParams gllvmprime
 #' @return a list of generated values
 gen_Y <- function(Z, X, parameters, families, linpar=NULL, XB=NULL) {
   # compute linpar based on the provided information

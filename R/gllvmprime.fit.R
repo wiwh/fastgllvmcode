@@ -1,14 +1,13 @@
 #' Title
 #'
-#' @param fg
-#' @param parameters.init
-#' @param controls
+#' @param fg: a gllvmprime model
+#' @param parameters.init: a list of initial values for the parameters
+#' @param controls: a list of controls for the fitting process
 #'
-#' @return
+#' @return a gllvmprime object fitted to the data
 #' @export
 #'
-#' @examples
-fastgllvm.fit <- function(fg, parameters.init = NULL, controls) {
+gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
   # Initialization
   # --------------
   if (!is.null(parameters.init)) {
@@ -179,12 +178,12 @@ if(0) {
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
 
   set.seed(14240)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
+  fg <- gen_gllvmprime(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, miss.prob = 0, scale=1, phi=rep(1, p))
 
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- fastgllvm(fg$Y, q = q, family=family, maxit=100, hist=200, method="full", trim=.1, intercept=intercept, alpha=.5, hessian=T, rescale=T)
+  fit1 <- gllvmprime(fg$Y, q = q, family=family, maxit=100, hist=200, method="full", trim=.1, intercept=intercept, alpha=.5, hessian=T, rescale=T)
   plot(fit1)
   fit1 <- update(fit1, rescale=F)
   plot(fit1)
@@ -197,7 +196,7 @@ if(0) {
   # clear winner in poisson
   # full, with rescaling outside the loopa-
   set.seed(13342)
-  fit2 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.5, intercept=intercept, alpha=.1, hessian=T, maxit=20, use_signs = F, H=1, rescale=T)
+  fit2 <- gllvmprime(fg$Y, X=fg$X, q = q, family=family, hist=100, method="full", trim=.5, intercept=intercept, alpha=.1, hessian=T, maxit=20, use_signs = F, H=1, rescale=T)
   fit2 <- update(fit2, H=1, alpha=.05, maxit=50)
   plot(fit2)
   fit2 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
@@ -206,21 +205,21 @@ if(0) {
 
   # simple, with rescaling
   set.seed(13342)
-  fit3 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=100, trim=.1, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit3 <- gllvmprime(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=100, trim=.1, intercept=intercept, alpha=.1, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   plot(fit3)
   fit3 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit3)
 
   # simple, with rescaling
   set.seed(13342)
-  fit4 <- fastgllvm(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
+  fit4 <- gllvmprime(fg$Y, X=fg$X, q = q, family=family, hist=100, method="simple", batch_size=500, trim=.3, intercept=intercept, alpha=.3, hessian=T, maxit=100, use_signs = F, H=1, rescale=F)
   plot(fit4)
   fit4 <- update(fit2, H=10, alpha=fit2$controls$alpha*10, maxit=10)
   plot(fit4)
 
   # Approx for large p
   set.seed(1334)
-  fit5 <- fastgllvm(fg$Y, q = q, family=family, hist=100, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
+  fit5 <- gllvmprime(fg$Y, q = q, family=family, hist=100, method="approx", batch_size=1000, trim=.1, intercept=intercept, alpha=.1, hessian=F, maxit=100, use_signs = T, H=1, rescale=F)
   fit5 <- update(fit4, H=10, alpha=fit4$controls$alpha/10, maxit=10)
   plot(fit5)
 

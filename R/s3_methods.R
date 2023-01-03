@@ -4,19 +4,19 @@
 
 #' Predict the latent variable Z from a gllvm, assuming it is multivariate normally distributed.
 #'
-#' @param f: an object of class "fastgllvm"
+#' @param f: an object of class "gllvmprime"
 #' @param method: one of "glm" or "ridge" (default)
 #'
 #' @return a n x q matrix of factors
 #'
 #' @export
-predict.fastgllvm <- function(f, method=c("fastgllvm", "glm", "glmnet")){
+predict.gllvmprime <- function(f, method=c("gllvmprime", "glm", "glmnet")){
   compute_zstar(f$Y, f$A, f$linpar$XB, f$families)
 }
 
-# Plot the fastgllvm object
+# Plot the gllvmprime object
 #' @export
-plot.fastgllvm <- function(f, plot.last=NULL){
+plot.gllvmprime <- function(f, plot.last=NULL){
   if(is.null(f$hist)) {
     stop("Fit the model before attempting to plot.")
   }
@@ -36,10 +36,10 @@ plot.fastgllvm <- function(f, plot.last=NULL){
 }
 
 #' Update the fit with another round of stochastic approximation
-#' @param ...: named arguments, same as in the call to fastgllvm
-#' @method update fastgllvm
+#' @param ...: named arguments, same as in the call to gllvmprime
+#' @method update gllvmprime
 #' @export
-"update.fastgllvm" <- function(fg, ...){
+"update.gllvmprime" <- function(fg, ...){
   args <- list(...)
 
   # unpacking control arguments
@@ -49,55 +49,55 @@ plot.fastgllvm <- function(f, plot.last=NULL){
     }
   }
 
-  fastgllvm.fit(fg, parameters.init = fg$parameters, controls=fg$controls)
+  gllvmprime.fit(fg, parameters.init = fg$parameters, controls=fg$controls)
 }
 
-#' Subsets the fastgllvm object to only include observational units indicated in `index`
+#' Subsets the gllvmprime object to only include observational units indicated in `index`
 #'
 #' @param index: numeric vector indicating which observations to keep
 #' @export
-subset.fastgllvm  <- function(fastgllvm, index) {
+subset.gllvmprime  <- function(gllvmprime, index) {
   if (is.null(index)) {
-    index <- 1:fastgllvm$dimensions$n
+    index <- 1:gllvmprime$dimensions$n
   }
-  fastgllvm$dimensions$n <- length(index)
-  fastgllvm$Z <- fastgllvm$Z[index,,drop=F]
-  fastgllvm$Y <- fastgllvm$Y[index,,drop=F]
-  fastgllvm$X <- fastgllvm$X[index,,drop=F]
-  if (!is.null(fastgllvm$Miss))fastgllvm$Miss <- fastgllvm$Miss[index,,drop=F]
-  if (!is.null(fastgllvm$linpar)) fastgllvm$linpar <- fastgllvm$linpar[index,,drop=F]
-  if (!is.null(fastgllvm$mean)) fastgllvm$mean <- fastgllvm$mean[index,,drop=F]
-  fastgllvm
+  gllvmprime$dimensions$n <- length(index)
+  gllvmprime$Z <- gllvmprime$Z[index,,drop=F]
+  gllvmprime$Y <- gllvmprime$Y[index,,drop=F]
+  gllvmprime$X <- gllvmprime$X[index,,drop=F]
+  if (!is.null(gllvmprime$Miss))gllvmprime$Miss <- gllvmprime$Miss[index,,drop=F]
+  if (!is.null(gllvmprime$linpar)) gllvmprime$linpar <- gllvmprime$linpar[index,,drop=F]
+  if (!is.null(gllvmprime$mean)) gllvmprime$mean <- gllvmprime$mean[index,,drop=F]
+  gllvmprime
 }
 
 
-#' Simulate new data from a given fastgllvm object
+#' Simulate new data from a given gllvmprime object
 #´
 #' @param index: numeric vector indicating which observation unit to simulate, useful when covariate information X is provided.
-#' @param value: a fastgllvm object with the simulations
-#' @param conditional: should the simulation be conditional on fastgllvm$Z?
+#' @param value: a gllvmprime object with the simulations
+#' @param conditional: should the simulation be conditional on gllvmprime$Z?
 #' @export
-simulate.fastgllvm <- function(fastgllvm, nsim=1, conditional=F, return_object=F){
+simulate.gllvmprime <- function(gllvmprime, nsim=1, conditional=F, return_object=F){
   if(!conditional) {
-    fastgllvm$Z <- with(fastgllvm, gen_Z(dimensions$n, dimensions$q))
+    gllvmprime$Z <- with(gllvmprime, gen_Z(dimensions$n, dimensions$q))
   }
-  simu <- with(fastgllvm, gen_Y(Z=Z, X=X, parameters = parameters, families = families))
+  simu <- with(gllvmprime, gen_Y(Z=Z, X=X, parameters = parameters, families = families))
   if (return_object) {
-    fastgllvm$Y <- simu$Y
-    fastgllvm$Z <- simu$Z
-    fastgllvm$linpar <- simu$linpar
-    fastgllvm$mean <- NULL
-    fastgllvm$Miss <- NULL
-    return(fastgllvm)
+    gllvmprime$Y <- simu$Y
+    gllvmprime$Z <- simu$Z
+    gllvmprime$linpar <- simu$linpar
+    gllvmprime$mean <- NULL
+    gllvmprime$Miss <- NULL
+    return(gllvmprime)
   } else {
     return(simu)
   }
 }
 
 
-#' Print a fastgllvm object
+#' Print a gllvmprime object
 #'
 #' @export
-print.fastgllvm <- function(fastgllvm){
-  cat("The 'print' method for a 'fastgllvm' object has not been implemented yet.")
+print.gllvmprime <- function(gllvmprime){
+  cat("The 'print' method for a 'gllvmprime' object has not been implemented yet.")
 }

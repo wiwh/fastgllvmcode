@@ -2,7 +2,7 @@
 #'
 #' @description For each observational unit i, computes using the Newton method the maximum a posteriori value, i.e. the values that maximizes the distribution of Z|Y_i for given parameter values.
 #'
-#' @inheritParams fastgllvm
+#' @inheritParams gllvmprime
 #' @param start: initial estimate of the MAP. If NULL, initial values will be computed depending based on an initial estimate of mu.
 #' @param maxit: maximum number of Newton iterations
 #' @param thresh: threshold to stop the routine; see
@@ -170,7 +170,7 @@ if(0) {
   if(k==0 & intercept) k <- 1
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(10030)
-  fg <- gen_fastgllvm(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
+  fg <- gen_gllvmprime(nobs=nobs, p=p, q=q, k=k, family=family, intercept=intercept, phi=runif(p) + 0.5, miss.prob = 0, scale=1)
   zhat <- compute_Z(fg, start=fg$parameters$Z, lambda=1)
 
   plot(fg$Z, zhat$Z, xlim=c(-3,3), ylim=c(-3,3)); abline(0, 1, col=2)

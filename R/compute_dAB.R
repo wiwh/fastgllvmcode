@@ -29,7 +29,7 @@ if(0) {
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(1030)
-  fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_gllvmprime(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
   psi <- compute_psi_simple(fg$Y, fg$X, fg$Z, fg$parameters, fg$families)
   gradient <- compute_gradients_simple(fg$Y, fg$X, fg$parameters, fg$families)
 
@@ -37,7 +37,7 @@ if(0) {
   sim <- sapply(1:1000, function(i){
     set.seed(i)
     if(i%%10==0 || i==1) cat("\n", i)
-    fg <- gen_fastgllvm(nobs=100, p=p, q=q, A= fg$parameters$A, B = fg$parameters$B, phi=fg$parameters$phi, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
+    fg <- gen_gllvmprime(nobs=100, p=p, q=q, A= fg$parameters$A, B = fg$parameters$B, phi=fg$parameters$phi, family=family, k=1, intercept=T, miss.prob = 0, scale=1)
     psi <- compute_gradients_simple(fg$Y, fg$X, fg$parameters, fg$families, fg$Miss)
     psi
   }, simplify=F)
@@ -66,7 +66,7 @@ if(0) {
   p <- poisson + gaussian + binomial
   family=c(rep("poisson", poisson), rep("gaussian", gaussian), rep("binomial", binomial))
   set.seed(12395)
-  fg <- gen_fastgllvm(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
+  fg <- gen_gllvmprime(nobs=100, p=p, q=q, family=family, phi=3*(1:p)/p, k=k, intercept=T, miss.prob = 0, scale=1)
 
   fg$hessian <- simulate_hessian_AB(fg)
   for(i in 1:100){
@@ -80,7 +80,7 @@ if(0) {
 
   set.seed(123)
   sims <- t(sapply(1:1000, function(na) {
-    fg <- simulate(fg, return_fastgllvm = TRUE)
+    fg <- simulate(fg, return_gllvmprime = TRUE)
     controls <- list(method=method, use_signs=use_signs)
     as.vector(unlist(compute_dAB_centered(fg, controls=controls, hessian=hessian)[c("dA", "dB")]))
   }))

@@ -2,17 +2,17 @@
 % Please edit documentation in R/intialize.R
 \name{initialize_parameters}
 \alias{initialize_parameters}
-\title{Given a fastgllvm object, compute good intial values.}
+\title{Given a gllvmprime object, compute good intial values.}
 \usage{
 initialize_parameters(fg, target = NULL, rescale = F, return_object = F)
 }
 \arguments{
-\item{fastgllvm:}{an object of class ''fastgllvm''}
+\item{gllvmprime:}{an object of class ''gllvmprime''}
 
 \item{target:}{if non NULL, must be a matrix of loadings: will perform a Procrustes rotation to target}
 
 \item{rescale:}{if true, both Z and A will be rescaled so that Z\%*\%t(A) remains unchanged but Z has unit variance.}
 }
 \description{
-Given a fastgllvm object, compute good intial values.
+Given a gllvmprime object, compute good intial values.
 }
