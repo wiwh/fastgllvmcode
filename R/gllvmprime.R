@@ -28,12 +28,12 @@
 #' p <- length(family)
 #' set.seed(1234)
 #' # Simulate data
-#' data <- gen_gllvmprime(nobs=500, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
+#' data <- gen_gllvmprime(nobs=100, p=p, q=q, family=family, k=1, intercept=1, miss.prob = 0)
 #' # Fit the data
-#' fit <- gllvmprime(data$Y, q = q, X=data$X, family=family,  intercept = 1, controls = list(minit=20, maxit=100,alpha=1, eps=1e-3))
+#' fit <- gllvmprime(data$Y, q = q, X=data$X, family=family, alpha=.5, maxit=20)
 #' # Evaluate the fit
 #' plot(fit)
-#' If necessary, update the fit.
+#' # If necessary, continue the fitting process:
 #' fit <- update(fit)
 #' # Evaluate the fit
 #' plot(fit)

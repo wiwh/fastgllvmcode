@@ -16,12 +16,12 @@ compute_parameters_update <- function(fg, step_size, hessian, grad_batch, grad_s
   dcovZ <- fg$parameters$covZ - grad_simul$covZ
 
   # updating all parameters
-  fg$parameters$A <- fg$parameters$A - trim(step_size * dA, controls$trim)
+  fg$parameters$A <- fg$parameters$A - step_size * trim(dA, controls$trim)
   if (!is.null(fg$parameters$B)) {
-    fg$parameters$B <- fg$parameters$B - trim(step_size * dB, controls$trim)
+    fg$parameters$B <- fg$parameters$B - step_size * trim(dB, controls$trim)
   }
 
-  fg$parameters$phi <- fg$parameters$phi - trim(step_size * dphi*.1, controls$trim)
+  fg$parameters$phi <- fg$parameters$phi - step_size * .1 * trim(dphi, controls$trim)
 
   fg$parameters$covZ <- fg$parameters$covZ - min(step_size, .5) * (dcovZ) # TODO: check if it's ok to do that... I think so... but this may add some dependence
 

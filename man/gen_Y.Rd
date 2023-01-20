@@ -2,12 +2,12 @@
 % Please edit documentation in R/generate_data.R
 \name{gen_Y}
 \alias{gen_Y}
-\title{Generates responses from a gllvm, given all parameters and values}
+\title{Generates responses from a gllvm.}
 \usage{
 gen_Y(Z, X, parameters, families, linpar = NULL, XB = NULL)
 }
 \value{
-a list of generated values
+a list containing the responses and the various objects generated.
 }
 \description{
 Returns a matrix Y

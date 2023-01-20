@@ -1,19 +1,23 @@
-# Random Numbers Generation -----------
-# TODO:  write these in c++!
-
+#' Generate multivariate Normal data conditional on the linear parameter
 gen_norm <- function(linpar, phi, nobs, p){
   if(any(phi < 0)) stop("Negative values for the variance parameters.")
   t(matrix(rnorm(p*nobs), p, nobs)*sqrt(phi)) + linpar
 }
 
+#' Generate multivariate Poisson data conditional on the linear parameter
 gen_poisson <- function(linpar, nobs, p){
   sapply(1:p, function(j)rpois(nobs, exp(linpar[,j])))
 }
+
+#' Generate multivariate binomial data conditional on the linear parameter
 gen_binom <- function(linpar, size, nobs, p){
   sapply(1:p, function(j) rbinom(nobs, size[j], 1/(1+exp(-linpar[,j]))))
 }
 
-gen_binom_fast <- function(linpar, size, nobs, p){ # GEN BINOM FAST!
+#' Generate multivariate binomial data conditional on the linear parameter
+#'
+#' This is experimental and is faster than `gen_binom`.
+gen_binom_fast <- function(linpar, size, nobs, p){
   if(all(size==1)){
     (matrix(runif(nobs*p), nobs, p) < 1/(1+exp(-linpar)))*1
   } else {
@@ -32,11 +36,12 @@ gen_binom_fast <- function(linpar, size, nobs, p){ # GEN BINOM FAST!
 }
 
 
-#' Generates responses from a gllvm, given all parameters and values
+#' Generates responses from a gllvm.
 #'
 #' Returns a matrix Y
 #' @inheritParams gllvmprime
-#' @return a list of generated values
+#' @return a list containing the responses and the various objects generated.
+
 gen_Y <- function(Z, X, parameters, families, linpar=NULL, XB=NULL) {
   # compute linpar based on the provided information
   if (is.null(linpar)) {
@@ -61,6 +66,7 @@ gen_Y <- function(Z, X, parameters, families, linpar=NULL, XB=NULL) {
 }
 
 
+# Generate a matrix of covariates
 gen_X <- function(nobs, k, intercept){
   X <- matrix(rnorm(nobs*k), nobs, k)
   if(k >= 1 && intercept){
@@ -69,34 +75,36 @@ gen_X <- function(nobs, k, intercept){
   X
 }
 
+# Generate a matrix of independent latent factors
 gen_Z <- function(nobs, q){
   matrix(stats::rnorm(nobs*q), nobs, q)
 }
 
+# Parameters Generation
 
+gen_A <- function(p, q, setting="A", nonzero=100, prop=.4) {
+  # setting "A" has only the 100 first loadings that are non-zero
+  A <- matrix(runif(p*q, -2, 2), p, q)
+  if (setting == "A") {
+    if(p>nonzero) {
+      A[(nonzero+1):p, ] <- 0
+    }
+  } else if (setting =="B") {
+    shift_size = round(p * (1-prop)/(q-1))
 
-# The next functions are not used and can be deleted.
-# ----------------
+    for (k in 1:q) {
 
-#' Returns a function used to generate Z. This is solely used within gllvm.
-#'
-#' @param method: one of "SA" (always random), "SP" (fixed)
-#' @param H: number of draws to sample, usually set to 1 for SA and more for SP
-#'
-#' @return a function that returns a list of generated Z.
-generate_Z_functionfactory <- function(nobs, q, H=1, method="SA"){
-if(method == "SP"){
-    Z_saved <- lapply(1:H, function(na) matrix(rnorm(nobs*q), nobs, q))
-    generate_Z <- function(){
-      Z_saved
+      nonzero_start = (k-1) * shift_size + 1
+
+      if (k == q) {
+        nonzero_end = p
+      } else {
+        nonzero_end   = nonzero_start + round(prop*p) - 1
+      }
+
+      nonzeros <- (1:p) %in% (nonzero_start:nonzero_end)
+      A[!nonzeros,k] <- 0
     }
   }
-  if(method == "SA"){
-    generate_Z <- function(){
-      lapply(1:H, function(na) matrix(rnorm(nobs*q), nobs, q))
-    }
-  }
-  generate_Z
+  A
 }
-
-

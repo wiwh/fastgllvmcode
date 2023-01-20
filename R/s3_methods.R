@@ -98,6 +98,28 @@ simulate.gllvmprime <- function(gllvmprime, nsim=1, conditional=F, return_object
 #' Print a gllvmprime object
 #'
 #' @export
-print.gllvmprime <- function(gllvmprime){
-  cat("The 'print' method for a 'gllvmprime' object has not been implemented yet.")
+print.gllvmprime <- function(gp, n=10){
+  if (is.null(gp$fit)) {
+    cat("\nThe model has not been fit to data yet. Run `gllvmprime` on data.")
+  } else {
+    cat("\nFit for the GLLVM model:")
+    cat("\n------------------------")
+    A <- gp$parameters$A
+    colnames(A) <- NULL
+    B <- gp$parameters$B
+    colnames(B) <- NULL
+    A <- dplyr::tibble(A=A)
+    B <- dplyr::tibble(B=B)
+    phi <- gp$parameters$phi
+    cat("\nLoadings:\n")
+    print(A, n=n)
+    cat("\nFixed coefficients:\n")
+    print(B, n=n)
+    cat("\nScale parameters:\n")
+    print(phi)
+    cat("\nNumerical controls:")
+      cat("\n\tNumber of iterations: \tmaxit =", gp$controls$maxit)
+      cat("\n\tBatch size: \t\tbatch_size =", gp$controls$batch_size)
+      cat("\n\tEnd value for alpha: \talpha =", gp$controls$alpha)
+  }
 }

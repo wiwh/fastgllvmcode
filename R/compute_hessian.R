@@ -8,8 +8,8 @@ mult_invHessian_dAB <- function(dAB, hessian_AB) {
 
 # Compute the hessian for AB
 simulate_hessian_AB <- function(fg, H=1){
-  Z <- scale(gen_Z(fg$dimensions$n, fg$dimensions$q), scale=F, center=T)
-  warning("Z has been rescaled in simulate_hessian_AB")
+  Z <- scale(gen_Z(fg$dimensions$n, fg$dimensions$q), scale=F, center=F)
+  # warning("Z has been rescaled in simulate_hessian_AB")
   linpar <- compute_linpar(Z, fg$parameters$A, fg$X, fg$parameters$B)
   linpar_bprimeprime <- compute_linpar_bprimeprime(linpar$linpar, fg$families)
   ZX <- cbind(Z, fg$X)

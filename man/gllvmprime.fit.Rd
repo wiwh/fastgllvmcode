@@ -2,7 +2,7 @@
 % Please edit documentation in R/gllvmprime.fit.R
 \name{gllvmprime.fit}
 \alias{gllvmprime.fit}
-\title{Title}
+\title{Fits a gllvmprime object to the data.}
 \usage{
 gllvmprime.fit(fg, parameters.init = NULL, controls)
 }
@@ -17,5 +17,5 @@ gllvmprime.fit(fg, parameters.init = NULL, controls)
 a gllvmprime object fitted to the data
 }
 \description{
-Title
+Fits a gllvmprime object to the data.
 }

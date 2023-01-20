@@ -1,11 +1,10 @@
-#' Title
+#' Fits a gllvmprime object to the data.
 #'
 #' @param fg: a gllvmprime model
 #' @param parameters.init: a list of initial values for the parameters
 #' @param controls: a list of controls for the fitting process
 #'
 #' @return a gllvmprime object fitted to the data
-#' @export
 #'
 gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
   # Initialization
@@ -54,7 +53,7 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
       hessian <- update_hessian(hessian_old, hessian_new, weight_old=.9)
     }
 
-    step_size = (controls$alpha + 5)/ (5+i)
+    step_size = (controls$alpha)/ (i**.6)
 
     if(!is.null(controls$H.seed)) warning("The seed is beeing reset! This corresponds to the sample path method, not the SA method.")
 
@@ -112,7 +111,7 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
 
     fg$deviance <- mean(compute_deviance(fg))
 
-    cat("\nIteration: ", i, "dev:", fg$deviance, "range: ", range(fg$parameters$A))
+    if (controls$verbose) cat("\nIteration: ", i, "dev:", fg$deviance, "range: ", range(fg$parameters$A))
 
     if(!is.null(controls$hist)){
       if (length(params_hist) > controls$hist) params_hist[[1]] <- NULL
@@ -162,11 +161,11 @@ update_hessian <- function(hessian_old, hessian_new, weight_old) {
 
 if(0) {
   devtools::load_all()
-  poisson  <- 0
+  poisson  <- 100
   gaussian <- 0
-  binomial <- 4
-  nobs <- 200
-  q <- 1
+  binomial <- 0
+  nobs <- 1000
+  q <- 2
 
   p <- poisson + gaussian + binomial
 
@@ -183,7 +182,14 @@ if(0) {
 
   # full, with hessian, no rescaling
   set.seed(13342)
-  fit1 <- gllvmprime(fg$Y, q = q, family=family, maxit=100, hist=200, method="full", trim=.1, intercept=intercept, alpha=.5, hessian=T, rescale=T)
+  fit1 <- gllvmprime(fg$Y, q = q, family=family, maxit=100, hist=200, method="full", trim=.2, intercept=intercept, alpha=1.5, hessian=F, rescale=T, verbose = T)
+  plot(fit1)
+  fit1 <- update(fit1, alpha=.1)
+  for(i in 1:100) {
+    fit1 <- update(fit1, alpha=.2, maxit=20, verbose=F)
+    cat("\n\n\n covZ", cov(fit1$Z))
+    plot(fit1)
+  }
   plot(fit1)
   fit1 <- update(fit1, rescale=F)
   plot(fit1)
@@ -252,6 +258,7 @@ if(0) {
 
   plot(fg$parameters$A, psych::Procrustes(fit1$parameters$A, fg$parameters$A)$loadings, col=1)
   abline(0,1,col=2)
+  points(fg$parameters$B, fit1$parameters$B, col=2)
   points(fg$parameters$A, psych::Procrustes(fit2$parameters$A, fg$parameters$A)$loadings, col=2)
   # points(fg$parameters$B, fit2$parameters$B, col=3)
   points(fg$parameters$A, psych::Procrustes(fit3$parameters$A, fg$parameters$A)$loadings, col=3)
