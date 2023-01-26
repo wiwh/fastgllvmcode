@@ -82,6 +82,7 @@ gen_Z <- function(nobs, q){
 
 # Parameters Generation
 
+# Generate sparse loading matrices
 gen_A <- function(p, q, setting="A", nonzero=100, prop=.4) {
   # setting "A" has only the 100 first loadings that are non-zero
   A <- matrix(runif(p*q, -2, 2), p, q)
@@ -107,4 +108,25 @@ gen_A <- function(p, q, setting="A", nonzero=100, prop=.4) {
     }
   }
   A
+}
+
+
+if (0) {
+  devtools::load_all()
+
+  set.seed(1231)
+  n <- 1000
+  p <- 20
+  q <- 2
+  k <- 2
+  intercept <- T
+  family = c(rep("gaussian", 10), rep("binomial", 10))
+  A <- gen_A(p, q, setting="B", prop=.6)
+  fg <- fastgllvm::gen_gllvmprime(n,p=p, q=q, k=k, intercept=intercept, family=family, A=A)
+  # save data
+  data <- list(Y = fg$Y,
+               X = fg$X,
+               family = fg$families$vec)
+  saveRDS(data, file="./data/example_1.rds")
+
 }
