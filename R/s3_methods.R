@@ -109,8 +109,8 @@ print.gllvmprime <- function(gp, n=10){
   if (is.null(gp$fit)) {
     cat("\nThe model has not been fit to data yet. Run `gllvmprime` on data.")
   } else {
-    cat("\nFit for the GLLVM model:")
-    cat("\n------------------------")
+    cat("Fitted GLLVM model:")
+    cat("\n-------------------")
     A <- gp$parameters$A
     colnames(A) <- NULL
     B <- gp$parameters$B

@@ -9,8 +9,7 @@ gen_kfold_sets <- function(n, k) {
   })
 }
 
-
-crossvalidate <- function(fit, k) {
+crossvalidate_k <- function(fit, k) {
   kfold_sets <- gen_kfold_sets(fit$dimensions$n, k)
   cv_sims <- lapply(kfold_sets, function(set) {
     train <- subset(fit, set$train)

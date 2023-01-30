@@ -27,6 +27,7 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
     stop("Unknown gradient method 'method'.")
   }
 
+  pb <- txtProgressBar(style=3, width=40)
   hessian <- NULL
 
   fg <- compute_mean(fg, return_object = T)
@@ -47,13 +48,15 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
   # ---------------------------
   for (i in 1:controls$maxit) {
 
+
+
     if (controls$hessian) {
       hessian_old <- hessian
       hessian_new <- simulate_hessian_AB(fg)
       hessian <- update_hessian(hessian_old, hessian_new, weight_old=.9)
     }
 
-    step_size = (controls$alpha)/ (i**.6)
+    step_size = (controls$alpha) * 4*(1 + controls$maxit * .1)/ (i + controls$maxit*.05)
 
     if(!is.null(controls$H.seed)) warning("The seed is beeing reset! This corresponds to the sample path method, not the SA method.")
 
@@ -111,7 +114,8 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
 
     fg$deviance <- mean(compute_deviance(fg))
 
-    if (controls$verbose) cat("\nIteration: ", i, "dev:", fg$deviance, "range: ", range(fg$parameters$A))
+    setTxtProgressBar(pb, i/(controls$maxit+1), title="Iterating...")
+    cat(" Deviance:", signif(fg$deviance,4))
 
     if(!is.null(controls$hist)){
       if (length(params_hist) > controls$hist) params_hist[[1]] <- NULL
@@ -122,12 +126,18 @@ gllvmprime.fit <- function(fg, parameters.init = NULL, controls) {
   fg$parameters <- ma
   fg$Z <- compute_Z(fg, start=fg$Z)$Z
   fg <- compute_mean(fg, return_object = T)
+  fg$deviance <- mean(compute_deviance(fg))
+
+  setTxtProgressBar(pb, 1, title="Iterating...")
+  cat(" Final deviance:", paste0(signif(fg$deviance,4), "."))
+  close(pb)
 
   if(!is.null(controls$hist)){
     history <- sapply(names(params_hist[[1]]), function(par_name) {
       do.call(rbind, lapply(params_hist, function(parameters_i) as.vector(parameters_i[[par_name]])))
     }, simplify=F)
   }
+
 
   fg$hist <- if(controls$hist) history else NULL
   fg$controls <- controls

@@ -178,8 +178,8 @@ initialize_parameters <- function(fg, target=NULL, rescale=F, return_object = F)
       A=rescaled$A
       Z=rescaled$Z
     }
-    setTxtProgressBar(pb, 1, title="Initialization Complete.")
-    cat(" Initialization complete.")
+    setTxtProgressBar(pb, 1, title="Initialization Completed")
+    cat(" Initialization complete. ")
     close(pb)
     # re-scale zhat and A
     list(A=A, B=B, phi=phi, Z=Z, covZ=cov(Z))
@@ -242,42 +242,6 @@ recenter <- function(parameters, intercept.id) {
   parameters
 }
 
-# init_Z <- function(Y, A, phi) {
-#   Y %*% (A/phi) %*% solve(t(A) %*% (A/phi))
-# }
-# rescale Z to have unit diagonal variance, and A so that ZA remains the same value
-# target: a data matrix whose variance the transformed Z must match. If NULL, the variance is the identity matrix.
-rescale.old <- function(Z, A=NULL, target.data=NULL, target.cov=NULL) {
-  Z <- scale(Z, scale=F)
-  b <- matrix(attr(Z, "scaled:center"), nrow=1)
-  if (is.null(target.data) && is.null(target.cov)) {
-    #TODO: rescale B as well here? if Z is not centered, recenter it and change B so that XB + ZA remains the same value
-    C <- chol((t(Z) %*% Z)/nrow(Z))
-    Cneg <- solve(C)
-    Z <- Z %*% Cneg
-    if (!is.null(A)) A <- A %*% t(C)
-  } else {
-    Z.c <- chol((t(Z) %*% Z)/nrow(Z))
-    if(is.null(target.cov)) {
-      target <- scale(target.data, scale=F)
-      target.c <- chol(t(target) %*% target/nrow(target))
-    } else {
-      target.c <- chol(target.cov)
-    }
-
-    C <- solve(target.c) %*% Z.c
-    Cneg <- solve(Z.c) %*% target.c
-    Z <- Z %*% Cneg
-    if (!is.null(A)) A <- A %*% t(C)
-  }
-
-  # add the rescaled bias (p.137 in blue book)
-  Z <- t(t(Z) + as.vector(b %*% Cneg))
-  # TODO: TEST THAT: Zt(A) (after centing Z) remains the same
-  list(Z=Z, A=A)
-}
-
-# testing that rescale does not change the linear parameter
 
 if(0) {
   devtools::load_all()

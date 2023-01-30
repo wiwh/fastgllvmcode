@@ -1,8 +1,10 @@
 ---
-title: "gllvmprime: fit GLLVM using Stochastic Approximation"
+title: "gllvmprime: fit a GLLVM model with mixed responses"
 author: "Guillaume Blanc"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output: pdf_document
+fig_width: 20
+fig_height: 15
 vignette: >
   %\VignetteIndexEntry{Vignette Title}
   %\VignetteEngine{knitr::rmarkdown}
@@ -16,66 +18,87 @@ knitr::opts_chunk$set(
 )
 ```
 
-Vignettes are long form documentation commonly included in packages. Because they are part of the distribution of the package, they need to be as compact as possible. The `html_vignette` output type provides a custom style sheet (and tweaks some options) to ensure that the resulting html is as small as possible. The `html_vignette` format:
 
-- Never uses retina figures
-- Has a smaller default figure size
-- Uses a custom CSS stylesheet instead of the default Twitter Bootstrap style
+This document showcases how to fit a GLLVM model to a toy dataset using the package `gllvmprime`. This dataset has a matrix of responses `Y` with $n=1000$ observations on $p=20$ responses, the first $10$ of which are (conditional) Gaussian and the last $10$ are (conditional) Bernoulli. What's more, it has some information on one covariate in the matrix `X`, which includes an intercept as a column of $1$.
 
-## Vignette Info
+Fitting the dataset consists in calling the `gllvmprime` function. The necessary parameters to give are: 
 
-Note the various macros within the `vignette` section of the metadata block above. These are required in order to instruct R how to build the vignette. Note that you should change the `title` field and the `\VignetteIndexEntry` to match the title of your vignette.
+* `Y`: a matrix of responses,
+* `q`: the number of latent variables, i.e. the dimensions of the latent space (defaults to 2),
+* `family`: the type of responses given by the names of the (conditional) distribution of the responses. 
+
+The `family` argument admits either a string if the responses are all of the same type, or, more generally, a $p$-dimensional vector of strings. The types of conditional distribution currently implemented are `poisson`, `bernoulli`, and `gaussian`.
+
+Other noteworthy arguments of the `gllvmprime` function are: 
+
+* `X`, a matrix of covariate,
+* `intercept`: a boolean variable which, if set to `intercept=TRUE`, will concatenate a column of ones to the matrix of covariates `X` (and create it if it does not exist), except if `X` already contains an intercept column, in which case the `intercept` argument is ignored,
+* `maxit`: the maximum number of iterations,
+* `alpha`: the learning rate multiplier, which defaults to `alpha=1` , and which controls the variance of the iterations.
 
 
-## Example: Toy Dataset
-This toy dataset has a matrix of responses `Y` with $n=1000$ observations on $p=20$ responses, the first $10$ of which are (conditional) Gaussian and the last $10$ are (conditional) Bernoulli. What's more, it has covariate matrix `X`, which includes an intercept as a column of $1$.
 
-We now showcase how to fit the model using `gllvmprime`.
+## Fit a GLLVM model with mixed responses
 
+Our toy dataset is first loaded as a list whose elements are the covariates `X` (which includes an intercept) and the responses `Y`. To specify the conditional distribution of the responses, we create a character vector of size $p$ consisting of the names of the distribution. We then run the algorithm once, with the defaults arguments `alpha=1` and `maxit=50`.
 
-```{r, fig.show='hold'}
+```{r echo=TRUE, fig.show='hold', results='hide', cache=FALSE}
+library(gllvmprime)
+
+# The data is loaded
 data <- readRDS("../data/example_1.rds")
 
+# The families are specified.
 family <- c(rep("gaussian", 10), rep("binomial", 10))
 
-fit <- gllvmprime(data$Y, q=2, X=data$X, family=family, alpha=2)
+set.seed(213)
+fit <- gllvmprime(data$Y, q=2, X=data$X, family=family)
+```
+One can use the argument `verbose = TRUE` to display convergence information (in terms of deviance) as the algorithm proceeds. Since every additional iteration may potentially be useful to reduce noise, the algorithm will not stop early if some convergence criterion is reached; instead, it will run the number of iterations specified by the `maxit`argument, here set to the default value of `100`. We now manually check the convergence of the algorithm:
+
+
+```{r}
+plot(fit)
 ```
 
+The top-left plot represents the values of the loadings for all the 50 iterations, the top-right plot represents those of the fixed-effect coefficients, the bottom-left plot those of the scale parameters, and the bottom-right plot represents the evolution of the deviance, i.e., the fit of our model. While our estimator does not aim at minimizing the deviance, we have found after significant testing that it provides a very good indicator of the convergence of the algorithm: the deviance plot of a well fitted model would not show any obvious trend and be relatively stable. From the above graph, it seems that the iterates have stabilized around their solution.
 
-## Styles
+For best results, fitting a model using `gllvmprime` should be iterative: after the first fit, the user should use the visual diagnostic tools to assess the convergence, and, if necessary, update the fit using the `update`. This process is iterated until the user is satisfied with the fit. On the one hand, this procedure requires some work on the user's side; on the other, it provides the reassurance that the algorithm has properly converged.
 
-The `html_vignette` template includes a basic CSS theme. To override this theme you can specify your own CSS in the document metadata as follows:
+To try and improve on the result, let us use the `update` function. This function admits the same arguments as `gllvmprime`, and will use as default the values of the arguments right before the end of the last call of either `gllvmprime` or `update`. That is, it will start the fitting process where it was just left off in the previous call.
 
-    output: 
-      rmarkdown::html_vignette:
-        css: mystyles.css
+This gives the opportunity to change the `alpha` argument to either a lower value, in order to reduce the noise, or to a larger one to make faster progress. If left to its default value, `update` will continue the fit using a starting value of `alpha` given by the last value of alpha that was used, which is available in `fit$controls$alpha`. That is, the following two lines return the same value:
 
-## Figures
-
-The figure sizes have been customised so that you can easily put two images side-by-side. 
-
-```{r, fig.show='hold'}
-plot(1:10)
-plot(10:1)
+```{r eval=FALSE}
+fit_1 <- update(fit)
+fit_2 <- update(fit, alpha=fit$controls$alpha)
 ```
 
-You can enable figure captions by `fig_caption: yes` in YAML:
+Let us continue with the final value of `alpha` of the previous fit, which is the default behavior of `update`. Finally, let us increase the number of iterations to 100 using `maxit=100` to obtain our final estimate.
 
-    output:
-      rmarkdown::html_vignette:
-        fig_caption: yes
+```{r echo=TRUE, fig.show='hold', results='hide', cache=FALSE}
+fit <- update(fit, maxit=100, alpha=fit$controls$alpha)
+```
+We now again plot the new fit:
 
-Then you can use the chunk option `fig.cap = "Your figure caption."` in **knitr**.
-
-## More Examples
-
-You can write math expressions, e.g. $Y = X\beta + \epsilon$, footnotes^[A footnote here.], and tables, e.g. using `knitr::kable()`.
-
-```{r, echo=FALSE, results='asis'}
-knitr::kable(head(mtcars, 10))
+```{r}
+plot(fit)
 ```
 
-Also a quote using `>`:
+The convergence is good: there is no obvious trends in the convergence plots and the deviance plot seems to have stabilized. The scale parameters still showcase a bit of variance, but this does not affect the loadings and fixed coefficients much, if at all. Updating the fit once more using `fit <- update(fit, alpha=fit$controls$alpha/2)` will stabilize the estimate of the scale parameters. Note that the final value of the parameter reported by the algorithm is computed as the average of the last 20 iteration values, which further reduces the noise in the final estimate. 
 
-> "He who gives up [code] safety for [code] speed deserves neither."
-([via](https://twitter.com/hadleywickham/status/504368538874703872))
+## Displaying the results
+
+The values of the estimated parameter are available in `fit$parameters`:
+
+* the estimate of the loading matrix is found in `fit$parameters$A`
+* the estimate of the fixed effect coefficient matrix (if any) is found in `fit$parameters$B`
+* the estimate of the loading matrix is found in `fit$parameters$A`
+* the estimate of the scale vector is found in `fit$parameters$phi`
+
+What's more, the estimated scores (the imputing values) are found in `fit$Z`, and the estimated means (the fitted values) in `fit$mean`. The parameters can be be visualized by printing the `fit` object. The `print` method accepts an extra parameter, `n`, which takes  `n=10` as default and which limits the printing of the parameter values to the first `n` lines. Since we have $20$ responses, we set this value to `n=20` in order to see all parameters.
+
+```{r}
+print(fit, n=20)
+```
+
