@@ -1,0 +1,45 @@
+For pure damage, we can compute the time it takes to kill hell baal (TTKB) with guided arrow as a good measure of overall damage. The competing builds we are talking about typically are
+
+* **Faith MB build**: faith MB on self; act2 merc with pride. TTKB: 18.10
+* **Faith GMB build**: faith GMB on self; act 2 merc with pride. TTKB: 15.28
+* **Windforce faith**: windforce on self, act1 merc with faith: 14.66
+* **Windforce build**: windforce on self, act2 merc with pride, reaching 9 frames, TTKB: 15.89.
+
+If all we care about is damage, the windforce faith is the best build, but is a bit clunky because of the act1 merc's AI.
+
+Faith GMB is second best, but it sacrifices a lot of survavibility for this. Really, the dps are the same between the 9 frames windforce and the 7 frames GMB faith, although the 9 frames feels slow, which is subjective (but real for most).
+
+Now add hustle with BOS level 9.
+
+* **Faith MB build**:  this goes down the drain, since both MB and GMB only require 9 additional ias and GMB simply has more dammage.
+* **Faith GMB build**: only requires the gloves to be worn to reach 7frames. We gain fortitude, the helm can become anything and we can wear atma's. TTKB: 4.91 sec with Amp Dmg, 14.51 without.
+* **Windforce faith**: only requires the gloves to be worn to reach 7 frames. TTKB: 4.97 with Amp Dmg, 14.78 without
+* **Windforce build**: windforce on self, act2 merc with pride, reaching 7 frames requires 63 ias, which is easy enough: 20 on gloves, 35 on windforce and 15 on the helm. TTKB: 4.11 with Amp Dmg, 12.22 without. 
+
+With these calculations, with BOS level  9, there is indeed no practical reasons to build a faith, as the windforce build is better in almost all respects. This is because all builds will want to use Atma's and fortitude, and we only need 15% ias in the helm.
+
+I agree with OP that building a faith bow should have benefits, either in terms of flexibility (allowing a unique helmet, for instance a shako for MF), or DPS, or both. 
+
+However, BOS benefits the amazon in all aspects of her gameplay and is pretty well designed imho. It opens up many options and builds, as others have mentioned. I think BOS should be retained.
+
+**The solution** is to reduce the level of BOS. In what follows is a table of extra IAS required to achieve 7 frames with a Windforce without faith:
+
+* BOS lvl 1: 138 extra IAS needed to reach 7 frames
+* BOS lvl 2: 113 extra IAS needed to reach 7 frames
+* BOS lvl 3: 99 extra IAS needed to reach 7 frames
+* BOS lvl 4: 89 extra IAS needed to reach 7 frames
+* BOS lvl 5: 80  extra IAS needed to reach 7 frames
+* BOS lvl 6: 75 extra IAS needed to reach 7 frames
+* BOS lvl 7: 70 extra IAS needed to reach 7 frames
+* BOS lvl 8: 68 extra IAS needed to reach 7 frames
+* BOS lvl 9: 63 extra IAS needed to reach 7 frames
+
+With BOS of levels 3+, there is no real penalty of using Windforce in the endgame. With a level 2 BOS, 7 frames is still feasible with windforce only but it comes at a great sacrifice: either Fortitude needs to go, or it requires to have 20 ias in the amulet slot and 45 in the helmet, greatly reducing build flexibility. With Sunder charms, Atma's is especially important and so fortitude will need to go. With this change, the TTKB is augmented to 4.20 with Amp, 12.50 without. It still outperforms the competition, but requires many more extremely expensive jewels and bases to reach these numbers, tremendously more expensive than perfect Faith, and it comes at the cost of survivability and flexibility.  
+
+It bears noting that the faith builds are slightly worse off with the proposed change, requiring 32 extra IAS (gloves + helm).
+
+Finally, a level of BOS of 1 requires 138 IAS for the windforce build, against only 42 IAS for faith builds. It is still possible to attain, but is even more restrictive, and will fall behind the Faith build in all measures.
+
+**To summarize**: it is my belief that if the level of BOS were to be limited to 1 or 2, users will prefer Faith over Windforce.
+
+It is also my opinion that it is OK for faith to fall behind and not be used, and that a level 9 BOS could be tested for one season, with potential further nerfs down the road.

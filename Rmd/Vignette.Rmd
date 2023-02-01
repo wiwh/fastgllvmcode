@@ -18,6 +18,7 @@ knitr::opts_chunk$set(
 )
 ```
 
+\pagenumbering{gobble}
 
 This document showcases how to fit a GLLVM model to a toy dataset using the package `gllvmprime`. This dataset has a matrix of responses `Y` with $n=1000$ observations on $p=20$ responses, the first $10$ of which are (conditional) Gaussian and the last $10$ are (conditional) Bernoulli. What's more, it has some information on one covariate in the matrix `X`, which includes an intercept as a column of $1$.
 
