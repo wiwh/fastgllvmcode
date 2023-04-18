@@ -18,9 +18,11 @@ prepare_data <- function(gradient_sims) {
 
 plot_sim <- function(gradient_sims, gradient_sims_rescaled, scale_y_limits=c(-2, 10)) {
   gradient_sims <- prepare_data(gradient_sims) %>% mutate(rescaled="Original")
-  gradient_sims_rescaled <- prepare_data(gradient_sims_rescaled) %>% mutate(rescaled="Re-scaled")
+  if( !is.null(gradient_sims_rescaled)) {
+    gradient_sims_rescaled <- prepare_data(gradient_sims_rescaled) %>% mutate(rescaled="Re-scaled")
 
-  gradient_sims <- rbind(gradient_sims, gradient_sims_rescaled)
+    gradient_sims <- rbind(gradient_sims, gradient_sims_rescaled)
+  }
 
   gradient_sims %>% ggplot(aes(x=loading, y=value)) +
     geom_boxplot(outlier.shape=NA, size=.2) +
@@ -35,5 +37,7 @@ plot_sim <- function(gradient_sims, gradient_sims_rescaled, scale_y_limits=c(-2,
 
 plot_sim(-sims_full$sim_full$AB, sims_full$sim_full_rescaled$AB,  scale_y_limits = c(-2, 4))
 ggsave(filename="./experiments/gradients/sims_gradient_full.png", width = 14*.7, height=8*.7)
+plot_sim(-sims_full$sim_full$AB, NULL,  scale_y_limits = c(-2, 4))
+ggsave(filename="./experiments/gradients/sims_gradient_full_norescale.png", width = 14*.7, height=8*.7)
 plot_sim(-sims_simple$sim_simple$AB, sims_simple$sim_simple_rescaled$AB,  scale_y_limits = c(-2, 12))
 ggsave(filename="./experiments/gradients/sims_gradient_simple.png", width=14*.7, height =8*.7)

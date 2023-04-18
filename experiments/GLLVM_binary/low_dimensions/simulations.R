@@ -75,7 +75,7 @@ est.prime <- function(dat){
 est.mirtjml <- function(dat) {
   library(mirtjml)
   tm <- proc.time()
-  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q, tol=1e-3)
+  fit <- mirtjml::mirtjml_expr(dat$Y, dat$dimensions$q)
   tmdiff <- proc.time()-tm
   A <- fit$A_hat
   B <- fit$d_hat
@@ -85,7 +85,8 @@ est.mirtjml <- function(dat) {
 }
 
 est.all <- function(dat){
-  list(prime=est.prime(dat),
+  list(
+    prime=est.prime(dat),
        sprime=est.sprime(dat),
        gmf=est.gmf(dat),
        gllvm=est.gllvm(dat),
@@ -97,7 +98,7 @@ est.all <- function(dat){
 
 
 gen_dat <- function(n, p, q, A, B){
-  dat <- gen_fastgllvm(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A, B=B)
+  dat <- gen_gllvmprime(nobs = n, p=p, q=q, k=1, family="binomial", intercept = T, A = A, B=B)
   dat
 }
 
@@ -111,7 +112,7 @@ onesim <- function(seed, n, p, A, B){
   set.seed(seed)
   dat <- gen_dat(n, p, q=2, A=A, B=B)
   simres <- tryCatch(c(model=list(dat), est.all(dat), seed=seed, n=n, p=p), error=function(e) paste0("Error with seed=", seed, ", n=", n, ", p=",p, ", q=", 2 ))
-  saveRDS(simres, file=paste0("experiments/GLLVM_binary/low_dimensions/simres/n", n, "_p", p, "_seed", seed,".rds"))
+  saveRDS(simres, file=paste0("experiments/GLLVM_binary/low_dimensions/simres_mirtjml/n", n, "_p", p, "_seed", seed,".rds"))
 }
 
 
@@ -150,7 +151,7 @@ for(i in 1:nrow(settings)){
   A <- matrix(runif(p*q,-2,2), p, q)
   B <- matrix(runif(p, -1,1), p,1)
 
-  parallel::parLapply(cl, 51:100, onesim, n=n, p=p, A=A, B=B)
+  parallel::parLapply(cl, 1:100, onesim, n=n, p=p, A=A, B=B)
   # Close cluster
 }
 parallel::stopCluster(cl)

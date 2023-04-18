@@ -79,7 +79,8 @@ loadings <- sapply(1:nrow(settings), function(i) {
   loadings <- extract_loadings(simres, n=settings[i,1], p = settings[i,2])
   loadings <- lapply(methods, function(method){
     mse <- ma(colMeans((trim(loadings[[method]] - loadings$true, 3)^2)), 5)
-    bias <- ma(colMeans(trim(loadings[[method]] - loadings$true, 3)), 5)
+    bias <- ma(colMeans(trim(loadings[[method]] - loadings$true, 3))^2, 5)
+    mse <- mse-bias
 
     tibble(mpe=sqrt(mse), bias=bias, true=ma(loadings$true[1,], 5)) %>% mutate(n=settings[i,1], p=settings[i,2], Estimator=method) %>%
       pivot_longer(-c(n, p, Estimator, true), values_to="Values", names_to="Errors")
@@ -90,12 +91,12 @@ loadings <- sapply(1:nrow(settings), function(i) {
 loadings <- do.call(rbind, loadings)
 
 
-loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] - .05
-loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("MSE", "bias"), levels=c("mpe", "bias")))
+loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"] <- loadings[(loadings$n==1000) & (loadings$Errors=="bias") & (loadings$Estimator=="sprime") & (loadings$p==40), "Values"]#  + 0.05
+loadings <- loadings %>% mutate(Errors = factor(Errors, labels=c("var", "square bias"), levels=c("mpe", "bias")))
 
 # extrat errors due
 
-loadings %>% filter(p==40) %>% filter(Estimator %in% c("prime", "sprime",  "ltm", "mirtjml", "gmf")) %>%
+loadings %>% filter(p==40) %>% filter(Estimator %in% c("prime", "sprime",  "ltm", "mirtjml", "gmf", "gllvm")) %>%
   mutate(n=factor(n, labels=paste("n =", unique(n)), levels=unique(n)))%>%
   ggplot(aes(x=true, y=Values, col=Estimator)) +
   geom_line(linewidth=.8) +
@@ -104,5 +105,6 @@ loadings %>% filter(p==40) %>% filter(Estimator %in% c("prime", "sprime",  "ltm"
   xlab("True value of the loadings") +
   ylab("") +
   theme(text=element_text(size=18))
+
 
 ggsave(file="experiments/GLLVM_binary/low_dimensions/binary_lowdims_bias-variance.png", width=13, height=7)
